@@ -1,0 +1,11 @@
+1.4142135623730951d0,0.d0,2.d0,1.d0,t
+0.0d0,1,0.0005d0,0.05d0
+-20.d0,4.d0
+0,2.5484576d0
+1024
+
+V,ep0,ed0,D,itu
+xmu,nmu,dmu,temp
+rewMIN,rewMAX
+muflag,nread
+Nfreq

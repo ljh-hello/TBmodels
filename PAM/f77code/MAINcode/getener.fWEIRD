@@ -1,0 +1,173 @@
+      Etot=zero
+      Etot1=zero
+      Ekin=zero
+      Ekin1=zero
+      EkinA=zero
+      EkinB=zero
+      EkinC=zero
+      Epot=zero
+      Ehyb=zero
+      Ehyb1=zero
+      Emu=zero
+      Eepsi=zero
+      free=0.d0
+      emax=d
+      emin=-d
+      depsi=(emax-emin)/dfloat(Lepsi)
+
+      do j=1,Lepsi
+         e=emin+dfloat(j)*depsi
+         dens=ddens(e,1)
+         xfermi=fermi(e,0.d0,beta)
+         free=free+depsi*e*dens*xfermi
+      enddo
+      open(11,file='Efree.analytic')
+      write(11,*)temp,free
+
+      multi=int(beta0*Nfreq/(2*pi*L))
+      multi=10
+      if(multi.eq.0)multi=1
+      if(multi.gt.1)print*,'MULTI,NL =',multi,int(Nfreq*beta/(2*pi))
+
+
+c     - - - - - - - - - - 
+      if(1.eq.1)then
+!     Get the last freq, last GF, last Sigma to build the tails      
+         omega=pi/beta*dfloat(multi*L-1)
+         izeta0=xi*omega
+         izeta=izeta0+xmu-ep0-V**2/(izeta0+xmu-ed0)
+         greenp0=gfbethe(omega,izeta0,d)
+         greenp=gfbethe(omega,izeta,d)  
+         selfp=V**2/(izeta0+xmu-ed0)
+
+         kag0=-real(greenp0)*omega**2
+         kag=-real(greenp)*omega**2
+         imues=dimag(selfp)*omega
+         rmues=real(selfp)
+      endif
+
+
+      do i=-multi*L,multi*L
+         omega=pi/beta*dfloat(2*i-1)
+         zi=xi*omega
+         ialpha=zi+xmu-ed0
+
+         izeta0=zi
+         izeta=zi+xmu-ep0-(V**2/(ialpha))
+
+!     Green's function, Sigmapp
+         greenp0=gfbethe(omega,izeta0,d)
+         greenp=gfbethe(omega,izeta,d)
+         selfp=V**2/(ialpha)
+
+c     - - - - - - - - - - 
+         if(1.eq.2)then
+!     Tails & Renormalized GF,Sigma
+            tail0=(-kag0-xi*omega)/(kag0**2+omega**2)
+            tail=(-kag-xi*omega)/(kag**2+omega**2)
+            tails=rmues+xi*imues/omega         
+            greenpR=greenp-tail
+            greenp0R=greenp0-tail0
+            selfpR=selfp-tails 
+!     USELESS:does not improve. Is it a higher order correction?
+            EkinA=EkinA+2.d0*izeta0*(greenpR-greenp0R)
+!     USELESS:does not improve. Maybe 'cause selfp*greenp is already 1/w^2
+            Ehyb1=Ehyb1+4.d0*(selfpR*greenpR +selfpR*tail 
+     *           +tails*greenpR +tails*tail)
+         endif
+
+         tail0=(-kag0-xi*omega)/(kag0**2+omega**2)
+         tail=(-kag-xi*omega)/(kag**2+omega**2)
+         tails=rmues+xi*imues/omega         
+
+         greenpR=greenp-tail
+         greenp0R=greenp0-tail0
+         selfpR=selfp-tails 
+
+!     Kinetic energy
+         Ekin1=Ekin1+2.d0*(izeta*greenpR-izeta0*greenp0) !2.d0*izeta0*(greenp-greenp0) 
+         Ekin=Ekin+2.d0*(izeta*greenp-izeta0*greenp0)
+
+!     Hybridization energy
+         Ehyb=Ehyb+4.d0*(selfp*greenp)
+      enddo
+      print*,real(Ekin1)
+
+      kag0=-real(greenp0)*omega**2
+      kag=-real(greenp)*omega**2
+      imues=dimag(selfp)*omega
+      rmues=real(selfp)
+
+c     - - - - - - - - - - 
+!     DFT(tailz*tail)
+      if(1.eq.1)then
+         do i=-10*multi*L,10*multi*L
+            omega=pi/beta*dfloat(2*i-1)
+            tail=(-kag-xi*omega)/(kag**2+omega**2)
+            tails=rmues+xi*imues/omega       
+            tailz=xi*omega+xmu-ep0-tails
+            Ekin1=Ekin1+2.d0*(tailz*tail)
+         enddo
+      endif
+      print*,real(Ekin1)
+      kag0=abs(kag0)
+      kag=abs(kag)
+      coda1=(kag0-kag)*pi+
+     1     2.d0*(kag*atan(multi*L/kag)-kag0*atan(multi*L/kag0))
+
+      coda1=coda1-2.d0*(imues+kag*(xmu-ep0-rmues))/kag*
+     1     (pi/2.d0-atan(multi*L/kag))
+      coda1=temp*coda1
+      print*,coda1
+
+c     - - - - - - - - - - 
+c     if(1.eq.2)then
+c     EkinC=-2.d0*coda1      !2=spin degeneracy
+c     endif
+
+      coda2=2.d0*(imues-rmues*kag)/kag*(pi/2.d0-atan(multi*L/kag))
+      coda2=temp*coda2
+      print*,coda2
+      code=coda1                !+coda2
+
+!     code is a higher order correction ~ from 1.e-6 to 1.e-9
+c     print*,code,coda1,coda2
+
+      znp=znp-1.d0
+      znd=znd-1.d0
+      zntot=znp+znd
+
+      Ekin=temp*Ekin+2.d0*free
+      Ehyb=temp*Ehyb
+      Ehyb1=temp*Ehyb1
+      Eepsi=ed0*znd+ep0*znp
+      Emu=-xmu*zntot
+      Etot=Ekin+Ehyb+Eepsi+Emu
+c     - - - - - - - - - - 
+      if(1.eq.2)then
+         Ekin1=EkinA+EkinB+EkinC
+      endif
+
+      Ekin1=temp*Ekin1+2.d0*free!+(xmu-ep0)*znp 
+      Ekin1=Ekin1+2.d0*code     !2=spin
+      print*,real(Ekin1)
+      Etot1=Ekin1+Ehyb/2.d0+Eepsi+Emu !+(ed0-xmu)*znd
+
+
+      open(30,file='Etot.analytic',access='append')
+      open(31,file='Ekin.analytic',access='append')
+      open(32,file='Epot.analytic',access='append')
+      open(33,file='Ehyb.analytic',access='append')
+      open(34,file='Emu.analytic',access='append')
+      open(35,file='Eepsi.analytic',access='append')
+      write(30,*)temp,real(Etot),real(Etot1)
+      write(31,*)temp,real(Ekin),real(Ekin1)
+      write(32,*)temp,real(Epot)
+      write(33,*)temp,real(Ehyb) !,real(Ehyb1)
+      write(34,*)temp,real(Emu)
+      write(35,*)temp,real(Eepsi)
+      write(36,*)temp,code
+      do i=30,35
+         close(i)
+      enddo
+
