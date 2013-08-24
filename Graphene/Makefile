@@ -5,12 +5,12 @@ include sfmake.inc
 
 DIREXE=$(HOME)/.bin
 
-graphene:
+hc_haldane:
 	@echo "======================== $@ ============================="
 	${FC} ${STD} $@.f90 ${SFLIBS} -o $(DIREXE)/$@
 
 clean: 
 	@echo "Cleaning:"
-	@rm -fv $(DIREXE)/tdd-pam
+	@rm -fv $(DIREXE)/hc_haldane
 	@rm -f *.mod *.o *~
 #########################################################################

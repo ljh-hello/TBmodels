@@ -28,7 +28,7 @@ program graphene
   delta=0.d0
   xmu=0.d0
   wmax=5.d0
-  eps=1.d-2
+  eps=4.d-2
   beta=100.d0
 
   inquire(file="inputGRAPHENE.in",exist=iexist)
@@ -70,7 +70,6 @@ program graphene
   call start_timer
 
   !Honeycomb lattice basis: alat=1
-
 
   a1=[sqrt(3.d0),0.d0]          !
   a2=[-sqrt(3.d0),3.d0]/2.d0
