@@ -3,8 +3,8 @@
  set title 'Eigk.hc'
  set pm3d map
  set size square
- set xrange [-3.1416:3.0788]
- set yrange [-3.1416:3.0788]
+ set xrange [-3.1416:3.0159]
+ set yrange [-3.1416:3.0159]
  splot 'Eigk.hc'
  #set term png size 1920,1280
  #set out 'Eigk.hc.png'

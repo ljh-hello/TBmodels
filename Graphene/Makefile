@@ -2,15 +2,16 @@
 #======================================================
 include sfmake.inc
 #======================================================
-
+#EXE=hc_graphene
+EXE=hc_haldane
 DIREXE=$(HOME)/.bin
 
-hc_haldane:
+all:
 	@echo "======================== $@ ============================="
-	${FC} ${STD} $@.f90 ${SFLIBS} -o $(DIREXE)/$@
+	${FC} ${STD} $(EXE).f90 ${SFLIBS} -o $(DIREXE)/$(EXE)
 
 clean: 
 	@echo "Cleaning:"
-	@rm -fv $(DIREXE)/hc_haldane
+	@rm -fv $(DIREXE)/$(EXE)
 	@rm -f *.mod *.o *~
 #########################################################################
