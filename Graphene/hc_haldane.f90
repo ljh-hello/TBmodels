@@ -18,7 +18,7 @@ program graphene
   logical                            :: iexist
   real(8),dimension(L)               :: wm,wr
   real(8),dimension(:,:),allocatable :: KPath
-  namelist/hkvars/nkx,nky,ts,tsp,xmu,beta,eps
+  namelist/hkvars/nkx,nky,ts,tsp,mh,phi,xmu,beta,eps,wmax
 
   nkx=50
   nky=50
@@ -54,8 +54,11 @@ program graphene
   call parse_cmd_variable(eps,"EPS")
   call parse_cmd_variable(beta,"BETA")
 
+  phi=phi*pi
+
   open(20,file="parameters_graphene.hc")
   write(20,nml=hkvars)
+  write(*,nml=hkvars)
   close(20)
 
   wm = pi/beta*real(2*arange(1,L)-1,8)
@@ -72,11 +75,11 @@ program graphene
   !Honeycomb lattice basis: alat=1
   a1=[3.d0, sqrt(3.d0)]/2.d0
   a2=[3.d0,-sqrt(3.d0)]/2.d0
-  a3=a2-a1
+  a3=[0.d0, sqrt(3.d0)]
 
   !nearest-neighbor displacements:
-  nn1=[ 1.d0/2.d0, sqrt(3.d0)/2.d0]
-  nn2=[ 1.d0/2.d0,-sqrt(3.d0)/2.d0]
+  nn1=[ 1.d0, sqrt(3.d0)]/2.d0
+  nn2=[ 1.d0,-sqrt(3.d0)]/2.d0
   nn3=[-1.d0     ,0.d0]
 
 
@@ -110,8 +113,8 @@ program graphene
   fg = fg/real(Nk,8)
 
   call splot3d("Eigk.hc",kxgrid,kygrid,fk(:,:))
-  call splot("DOS.hc",wr,-dimag(fgr(:,1,1))/pi)
-  call splot("G_iw.hc",wm,fg(:,1,1))
+  call splot("DOS.hc",wr,-dimag(fgr(:,1,1))/pi,-dimag(fgr(:,2,2))/pi)
+  call splot("G_iw.hc",wm,fg(:,1,1),fg(:,2,2))
 
 
   allocate(Kpath(4,2))
@@ -129,25 +132,40 @@ program graphene
   enddo
   close(10)
 
+
 contains
 
+
   function get_hk(kpnt) result(hk)
-    real(8),dimension(2) :: kpnt
+    real(8),dimension(2)      :: kpnt
     complex(8),dimension(2,2) :: hk
-    real(8)    :: arg1,arg2,arg3
-    complex(8) :: fkp,epsk
-    arg1 = dot_product(kpnt,nn1)
-    arg2 = dot_product(kpnt,nn2)
-    arg3 = dot_product(kpnt,nn3)
-    fkp = exp(-xi*arg1)+exp(-xi*arg2)+exp(-xi*arg3)
-    arg1 = dot_product(kpnt,a1)
-    arg2 = dot_product(kpnt,a2)
-    arg3 = dot_product(kpnt,a3)
-    Hk(1,1) =  Mh-2.d0*tsp*(cos(arg1) + cos(arg2) + cos(arg3))*exp(-xi*pi*phi)
-    Hk(2,2) = -Mh-2.d0*tsp*(cos(arg1) + cos(arg2) + cos(arg3))*exp(xi*pi*phi)
-    Hk(1,2) = -ts*fkp
-    Hk(2,1) = -ts*conjg(fkp)
+    real(8)                   :: da1,da2,da3,aa1,aa2,aa3
+    complex(8)                :: fk,hkI,hkX,hkY,hkZ
+    !(k.\delta_j)
+    da1 = dot_product(kpnt,nn1)
+    da2 = dot_product(kpnt,nn2)
+    da3 = dot_product(kpnt,nn3)
+    !(k.a_j)
+    aa1 = dot_product(kpnt,a1)
+    aa2 = dot_product(kpnt,a2)
+    aa3 = dot_product(kpnt,a3)
+
+    ! hkX= -ts*(cos(da1)+cos(da2)+cos(da3))
+    ! hkY= -ts*(sin(da1)+sin(da2)+sin(da3))
+    ! hkZ= -2.d0*tsp*sin(phi)*(sin(aa1) + sin(aa2) + sin(aa3)) + Mh
+    ! hkI= -2.d0*tsp*cos(phi)*(cos(aa1) + cos(aa2) + cos(aa3))
+    ! Hk(1,1) = hkI + hkZ
+    ! Hk(2,2) = hkI - hkZ
+    ! Hk(1,2) = hkX - xi*hkY
+    ! Hk(2,1) = hkX + xi*hkY
+    !This is simpler:
+    fk = exp(-xi*da1)+exp(-xi*da2)+exp(-xi*da3)
+    Hk(1,1) =  Mh-2.d0*tsp*(cos(aa1-phi) + cos(aa2-phi) + cos(aa3-phi))
+    Hk(2,2) = -Mh-2.d0*tsp*(cos(aa1+phi) + cos(aa2+phi) + cos(aa3+phi))
+    Hk(1,2) = -ts*fk
+    Hk(2,1) = -ts*conjg(fk)
   end function get_hk
+
 
   function inverse_g0k(iw,hk) result(g0k)
     integer                     :: i
@@ -163,9 +181,8 @@ contains
     g0k(1,1) = one/(delta - vmix12*vmix21/ppi)
     g0k(2,2) = one/(ppi - vmix12*vmix21/delta)
     g0k(1,2) = -vmix12/(ppi*delta - vmix12*vmix21)
-    g0k(2,1) = -vmix21/(ppi*delta - vmix12*vmix21)!conjg(g0k(1,2))
+    g0k(2,1) = -vmix21/(ppi*delta - vmix12*vmix21)
   end function inverse_g0k
-
 
   function eplus(hk)
     complex(8),dimension(2,2) :: hk
@@ -181,4 +198,4 @@ contains
     eminus = eminus/2.d0
   end function eminus
 
-end program graphene
+end program

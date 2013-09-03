@@ -3,7 +3,8 @@
 include sfmake.inc
 #======================================================
 #EXE=hc_graphene
-EXE=hc_haldane
+#EXE=hc_haldane
+EXE=stripe_graphene
 DIREXE=$(HOME)/.bin
 
 all:
