@@ -4,7 +4,9 @@ include sfmake.inc
 #======================================================
 #EXE=hc_graphene
 #EXE=hc_haldane
-EXE=stripe_graphene
+#EXE=stripe_graphene
+#EXE=bhz_2x2_fcc
+EXE=bhz_fcc
 DIREXE=$(HOME)/.bin
 
 all:

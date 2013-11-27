@@ -14,7 +14,6 @@
 !
 ! OPTIONS
 !   nkx=[100]  - Number of points along the x component of the k-grid
-!   nky=[100]  - Number of points along the y component of the k-grid
 !   tpp=[1.0]  - Hopping amplitude between p-electrons
 !   tpd=[0.0]  - local hybridization between p- and d-electrons
 !   tdd=[0.0]  - Hopping amplitude between d-electrons
@@ -42,7 +41,7 @@ program tdd_pam
   integer              :: dcshift,count
   real(8)              :: epsik,ep,em,fmesh,xmu0,Hdd,Hpp
   real(8)              :: n11,n22
-  integer              :: Nkx,Nky,Nk
+  integer              :: Nkx,Nk
   real(8)              :: ix,iy
   real(8)              :: kx,ky
   real(8),dimension(L) :: wm,wr
@@ -55,10 +54,9 @@ program tdd_pam
   complex(8),dimension(2,2,L)   :: fgk
   real(8),dimension(2,2,0:Ltau) :: fgkt
 
-  namelist/hkvars/nkx,nky,tpp,tpd,tdd,ep0,ed0,u,xmu,beta,eps,file,dcflag
+  namelist/hkvars/nkx,tpp,tpd,tdd,ep0,ed0,u,xmu,beta,eps,file,dcflag
 
   nkx=200
-  nky=200
   tpp=0.25d0
   tpd=0.4d0
   tdd=0.d0
@@ -79,7 +77,6 @@ program tdd_pam
   endif
 
   call parse_cmd_variable(nkx,"NKX")
-  call parse_cmd_variable(nky,"NKY")
   call parse_cmd_variable(tpp,"TPP")
   call parse_cmd_variable(tpd,"TPD")
   call parse_cmd_variable(tdd,"TDD")
@@ -99,8 +96,8 @@ program tdd_pam
   wm = pi/beta*real(2*arange(1,L)-1,8)
   wr = linspace(-10.d0,10.d0,L,mesh=fmesh)
 
-  Nk=Nkx*Nky
-  call msg("Using Nk="//txtfy(Nk))
+  Nk=Nkx*Nkx
+  print*,"Using Nk=",Nk
   open(50,file=trim(file))
   write(nkstring,*)Nk
   write(50,*)trim(adjustl(trim(Nkstring)))," 1 1 1 1"
@@ -117,11 +114,11 @@ program tdd_pam
 
   open(101,file="Momentum_distribution.pd")
   fgr=zero ; fg =zero ;ep=0.d0 ; em=0.d0 ;count=0; hdd=0.d0; hpp=0.d0
-  call start_timer
+  call start_progress
   do ix=1,Nkx
      kx = -pi + 2.d0*pi*real(ix-1,8)/real(Nkx,8)
-     do iy=1,Nky
-        ky = -pi + 2.d0*pi*real(iy-1,8)/real(Nky,8)
+     do iy=1,Nkx
+        ky = -pi + 2.d0*pi*real(iy-1,8)/real(Nkx,8)
         epsik   = cos(kx)+cos(ky)
         Hk(1,1) = ed0 - 2.d0*tdd*epsik
         Hk(2,2) = ep0 - 2.d0*tpp*epsik + dble(dcshift)*U/2.d0
@@ -179,11 +176,11 @@ program tdd_pam
         ! hd = matmul(matmul(Uh,hk),iUh)
         ! write(202,"(4F20.12)")-2.d0*tpp*epsik,dreal(hd(1,1)),dreal(hd(2,2)),dreal(hd(1,2))
         count=count+1
-        call eta(count,Nk)
+        call progress_bar(count,Nk)
      enddo
   enddo
   close(101)
-  call stop_timer
+  call stop_progress
   fgr= fgr/real(Nk,8)
   fg = fg/real(Nk,8)
   ep = ep/real(Nk,8)

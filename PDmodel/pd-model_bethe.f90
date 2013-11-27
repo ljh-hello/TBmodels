@@ -49,15 +49,15 @@ program tdd_pam
   complex(8)           :: Hk(Norb,Norb),fg(L,Norb,Norb),fgr(L,Norb,Norb),w
   character(len=20)    :: file,nkstring
   logical              :: iexist,ibool,dcflag
-  real(8)              :: gzerop,gzerom,gzero,nkk(2,2)
+  real(8)              :: gzerop,gzerom,gzero,nkk(2,2),e2mean
 
   complex(8),dimension(2,2,L)   :: fgk
   real(8),dimension(2,2,0:Ltau) :: fgkt
 
   namelist/hkvars/nkx,nky,nkz,tpp,tpd,tdd,ep0,ed0,u,xmu,beta,eps,file,dcflag
 
-  nkx=200
-  nky=200
+  nkx=2000
+  nky=1
   nkz=1
   tpp=0.25d0
   tpd=0.4d0
@@ -69,7 +69,7 @@ program tdd_pam
   eps=1.d-3
   beta=100.d0
   file="hkfile.in"
-  dcflag=.true.
+  dcflag=.false.
 
   inquire(file="inputPDHAM.in",exist=iexist)
   if(iexist)then
@@ -93,7 +93,7 @@ program tdd_pam
   call parse_cmd_variable(file,"FILE")
   call parse_cmd_variable(dcflag,"DCFLAG")
 
-  dcshift=0 ; if(dcflag)dcshift=1
+  dcshift=0.d0 ; if(dcflag)dcshift=1.d0
 
   write(*,nml=hkvars)
 
@@ -116,7 +116,7 @@ program tdd_pam
   if(delta /= 0.d0)xmu=xmu+gzero
 
 
-  de = 2.d0/real(Nk,8)
+  de = 2.d0/real(Nk-1,8)
   fgr=zero ; fg =zero ; ep=0.d0 ; em=0.d0 ; count=0
   call start_timer
   do ix=1,Nk
@@ -141,7 +141,6 @@ program tdd_pam
      call eta(count,Nk)
   enddo
   call stop_timer
-
 
   open(10,file="pam_shift")
   rewind(10)

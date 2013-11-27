@@ -9,11 +9,11 @@ all: pd-model_fcc pd-model_bethe
 
 pd-model_fcc:
 	@echo "======================== $@ ============================="
-	${FC} ${OPT} -static $@.f90 ${SFLIBS} -o $(DIREXE)/$@
+	${FC} ${OPT} -static-intel $@.f90 ${SFLIBS} -o $(DIREXE)/$@
 
 pd-model_bethe:
 	@echo "======================== $@ ============================="
-	${FC} ${OPT} -static $@.f90 ${SFLIBS} -o $(DIREXE)/$@
+	${FC} ${OPT} -static-intel $@.f90 ${SFLIBS} -o $(DIREXE)/$@
 
 clean: 
 	@echo "Cleaning:"

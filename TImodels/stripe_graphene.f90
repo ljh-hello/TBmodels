@@ -134,7 +134,6 @@ program graphene
      close(102)
   endif
 
-
 contains
 
   function get_hk(N,kpnt) result(hk)
