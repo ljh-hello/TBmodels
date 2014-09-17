@@ -27,9 +27,9 @@
 !   dcflag=[T] - output unit file,default is no write
 
 program tdd_pam
-  USE COMMON_VARS
-  USE PARSE_CMD
-  USE TOOLS
+  USE CONSTANTS
+  USE PARSE_INPUT
+  USE ARRAYS
   USE IOTOOLS
   USE FUNCTIONS
   USE TIMER
@@ -101,7 +101,7 @@ program tdd_pam
   wr = linspace(-10.d0,10.d0,L,mesh=fmesh)
 
   Nk=Nkx!*Nky*Nkz
-  call msg("Using Nk="//txtfy(Nk))
+  write(*,*)"Using Nk="//txtfy(Nk)
   open(50,file=trim(file))
   write(nkstring,*)Nk
   write(50,*)trim(adjustl(trim(Nkstring)))," 1 1 1 1"
@@ -166,8 +166,8 @@ program tdd_pam
   end if
 
 
-  call msg("Remember to open the file:"//trim(file))
-  call msg("Parameters for "//trim(file)//" are in +paramaters4_"//trim(file))  
+  write(*,*)"Remember to open the file:"//trim(file)
+  write(*,*)"Parameters for "//trim(file)//" are in +paramaters4_"//trim(file)
   xmu=xmu0
   open(10,file="parameters4_"//trim(file))
   write(10,nml=hkvars)

@@ -9,8 +9,8 @@
 !   Output is on file *hkfile.in default.
 !
 ! MODEL Hamiltonian is:
-!  |ed0 - 2*tdd*[cos(kx)+cos(ky)],   v0 |
-!  |v0 ,   ep0 - 2*tpp*[cos(kx)+cos(ky)]|
+!  |ed0 - 2*tdd*[cos(kx)+cos(ky)],   tpd-4*v0*sin(kx)*sin(ky) |
+!  |tpd-4*v0*sin(kx)*sin(ky)        ,   ep0 - 2*tpp*[cos(kx)+cos(ky)]|
 !
 ! OPTIONS
 !   nkx=[100]  - Number of points along the x component of the k-grid
@@ -27,8 +27,9 @@
 program tdd_pam
   USE CONSTANTS
   USE PARSE_INPUT
-  USE ARRAYS
+  USE TOOLS
   USE IOTOOLS
+  USE ARRAYS
   USE FUNCTIONS
   USE TIMER
   USE FFTGF
@@ -37,10 +38,10 @@ program tdd_pam
 
   integer,parameter    :: L=2000,Norb=2,Ltau=200
   integer              :: i,j,k,iorb,jorb,ik
-  real(8)              :: tpp,v0,tpd,tdd,ed0,ep0,u,delta,xmu,beta,eps
+  real(8)              :: tpp,v0,tpd,alpha,tdd,ed0,ep0,u,delta,xmu,beta,eps
   integer              :: dcshift,count
   real(8)              :: epsik,ep,em,fmesh,xmu0,Hdd,Hpp
-  real(8)              :: n11,n22
+  real(8)              :: n11,n22,peloc(2),epmin,epmax
   integer              :: Nkx,Nk
   real(8)              :: ix,iy
   real(8)              :: kx,ky
@@ -54,12 +55,14 @@ program tdd_pam
   complex(8),dimension(2,2,L)   :: fgk
   real(8),dimension(2,2,0:Ltau) :: fgkt
 
-  namelist/hkvars/nkx,tpp,tpd,tdd,ep0,ed0,u,xmu,beta,eps,file,dcflag
+  namelist/hkvars/nkx,tpp,tpd,v0,alpha,ep0,ed0,u,xmu,beta,eps,file,dcflag
 
   nkx=200
   tpp=0.25d0
+  alpha=0.d0
+  tdd=alpha*tpp
   tpd=0.4d0
-  tdd=0.d0
+  v0 =0.d0
   ep0=0.d0
   ed0=0.d0
   u=0.d0
@@ -68,6 +71,8 @@ program tdd_pam
   beta=100.d0
   file="hkfile.in"
   dcflag=.true.
+  epmin=1000.d0
+  epmax=-1000.d0
 
   inquire(file="inputPDHAM.in",exist=iexist)
   if(iexist)then
@@ -79,7 +84,8 @@ program tdd_pam
   call parse_cmd_variable(nkx,"NKX")
   call parse_cmd_variable(tpp,"TPP")
   call parse_cmd_variable(tpd,"TPD")
-  call parse_cmd_variable(tdd,"TDD")
+  call parse_cmd_variable(alpha,"ALPHA")
+  call parse_cmd_variable(v0 ,"V0")
   call parse_cmd_variable(ep0,"EP0")
   call parse_cmd_variable(ed0,"ED0")
   call parse_cmd_variable(u,"U")
@@ -110,7 +116,8 @@ program tdd_pam
   if(delta<0.d0)gzero=gzerop
   if(delta>0.d0)gzero=gzerom
   if(delta /= 0.d0)xmu=xmu+gzero
-  print*,xmu,xmu0
+  write(*,*)'shift mu to (from) = ',xmu,'(',xmu-gzero,')'
+  write(*,*)'shift is           = ',gzero
 
   open(101,file="Momentum_distribution.pd")
   fgr=zero ; fg =zero ;ep=0.d0 ; em=0.d0 ;count=0; hdd=0.d0; hpp=0.d0
@@ -119,17 +126,14 @@ program tdd_pam
      kx = -pi + 2.d0*pi*real(ix-1,8)/real(Nkx,8)
      do iy=1,Nkx
         ky = -pi + 2.d0*pi*real(iy-1,8)/real(Nkx,8)
-        epsik   = cos(kx)+cos(ky)
-        Hk(1,1) = ed0 - 2.d0*tdd*epsik
-        Hk(2,2) = ep0 - 2.d0*tpp*epsik + dble(dcshift)*U/2.d0
-        Hk(1,2) = tpd
-        Hk(2,1) = tpd
+        !
+        Hk = Hk_model(kx,ky)
+        !
         write(50,"(3(F10.7,1x))")kx,ky,pi
         do iorb=1,Norb
            write(50,"(10(2F10.7,1x))")(Hk(iorb,jorb),jorb=1,Norb)
         enddo
 
-        Hk(2,2) = Hk(2,2)-dble(dcshift)*U/2.d0
         do i=1,L
            w = cmplx(wr(i),eps,8)+xmu
            fgr(i,:,:)=fgr(i,:,:) + inverse_g0k(w,Hk)
@@ -150,33 +154,14 @@ program tdd_pam
         nkk = matmul(iUh,matmul(nfk,Uh))        
         write(101,"(4F20.12)")-2.d0*tpp*epsik,nkk(1,1),nkk(2,2),nkk(1,2)
 
-        ! !Get momentum-distribution from G(iw)
-        ! do i=1,2
-        !    do j=1,2
-        !       call fftgf_iw2tau(fgk(i,j,:),fgkt(i,j,0:),beta)
-        !       nkk(i,j)=-fgkt(i,j,Ltau)
-        !    enddo
-        ! enddo
-        ! nkk(1,2)=nkk(1,2)-0.5d0
-        ! nkk(2,1)=nkk(2,1)-0.5d0
-        ! write(100,"(4F20.12)")-2.d0*tpp*epsik,nkk(1,1),nkk(2,2),nkk(1,2)
-
         ep=ep+eplus(hk)
         em=em+eminus(hk)
         hdd=hdd+Hk(1,1)
         hpp=hpp+Hk(2,2)
-
-        ! !print Hamiltonian values:
-        ! write(200,"(4F20.12)")-2.d0*tpp*epsik,dreal(hk(1,1)),dreal(hk(2,2)),dreal(hk(1,2))
-        ! !Print Eigenvalues:
-        ! hd=0.d0 ; hd(1,1)=eplus(hk) ; hd(2,2)=eminus(hk)
-        ! write(201,"(4F20.12)")-2.d0*tpp*epsik,dreal(hd(1,1)),dreal(hd(2,2)),dreal(hd(1,2))
-        ! !Diagonalize Hamiltonian and print diagonal terms, must be equal to 201
-        ! Uh = matrix_uk(hk) ; iUh= transpose(Uh)
-        ! hd = matmul(matmul(Uh,hk),iUh)
-        ! write(202,"(4F20.12)")-2.d0*tpp*epsik,dreal(hd(1,1)),dreal(hd(2,2)),dreal(hd(1,2))
         count=count+1
         call progress_bar(count,Nk)
+        if(eplus(hk) > epmax)epmax=eplus(hk)
+        if(eminus(hk) < epmin)epmin=eminus(hk)
      enddo
   enddo
   close(101)
@@ -193,6 +178,12 @@ program tdd_pam
   write(10,"(F20.12)")gzero
   close(10)
 
+  open(10,file="Delta_ind")
+  rewind(10)
+  write(10,*)-epmax+epmin,epmax,epmin
+  close(10)
+
+
   ik = 0
   open(10,file="Eigenbands.pd")
   !From \Gamma=(0,0) to X=(pi,0): 100 steps
@@ -200,24 +191,18 @@ program tdd_pam
      ik=ik+1
      kx = 0.d0 + pi*real(ix-1,8)/100.d0
      ky = 0.d0
-     epsik   = cos(kx)+cos(ky)
-     Hk(1,1) = ed0 - 2.d0*tdd*epsik
-     Hk(2,2) = ep0 - 2.d0*tpp*epsik
-     Hk(1,2) = tpd
-     Hk(2,1) = tpd
-     write(10,*)ik,eplus(hk),eminus(hk)
+     Hk = Hk_model(kx,ky)
+     call matrix_diagonalize(Hk,peloc)
+     write(10,*)ik,peloc(1),peloc(2)!,eplus(Hk_model(kx,ky))
   enddo
   !From X=(pi,0) to M=(pi,pi): 100 steps
   do iy=1,100
      ik=ik+1
      kx = pi
      ky = 0.d0 + pi*real(iy-1,8)/100.d0
-     epsik   = cos(kx)+cos(ky)
-     Hk(1,1) = ed0 - 2.d0*tdd*epsik
-     Hk(2,2) = ep0 - 2.d0*tpp*epsik
-     Hk(1,2) = tpd
-     Hk(2,1) = tpd
-     write(10,*)ik,eplus(hk),eminus(hk)
+     Hk = Hk_model(kx,ky)
+     call matrix_diagonalize(Hk,peloc)
+     write(10,*)ik,peloc(1),peloc(2)!,eplus(Hk_model(kx,ky))
   enddo
   !From M=(pi,pi) to \Gamma=(0,0): 100 steps
   do ix=1,100
@@ -225,14 +210,12 @@ program tdd_pam
      iy=ix
      kx = pi - pi*real(ix-1,8)/100.d0
      ky = pi - pi*real(iy-1,8)/100.d0
-     epsik   = cos(kx)+cos(ky)
-     Hk(1,1) = ed0 - 2.d0*tdd*epsik
-     Hk(2,2) = ep0 - 2.d0*tpp*epsik
-     Hk(1,2) = tpd
-     Hk(2,1) = tpd
-     write(10,*)ik,eplus(hk),eminus(hk)
+     Hk = Hk_model(kx,ky)
+     call matrix_diagonalize(Hk,peloc)
+     write(10,*)ik,peloc(1),peloc(2)!,eplus(Hk_model(kx,ky))
   enddo
   close(10)
+
 
   call splot("DOSdd.pd",wr,-dimag(fgr(:,1,1))/pi)
   call splot("DOSpp.pd",wr,-dimag(fgr(:,2,2))/pi)
@@ -242,7 +225,7 @@ program tdd_pam
   n11 = -2.d0*sum(dimag(fgr(:,1,1))*fermi(wr(:),beta))*fmesh/pi
   n22 = -2.d0*sum(dimag(fgr(:,2,2))*fermi(wr(:),beta))*fmesh/pi
   open(10,file="observables.pd")
-  write(10,"(14F20.12)")tpp,tpd,tdd,xmu,u,n11,n22,n11+n22,&
+  write(10,"(14F20.12)")tpp,tpd,alpha*tpp,xmu,u,n11,n22,n11+n22,&
        ep,em,abs(ep-em),gzerop,gzerom,abs(gzerop-gzerom)
   close(10)
 
@@ -250,9 +233,10 @@ program tdd_pam
   write(*,"(A,2F14.9)")"Center of mass of hyb bands   =",ep,em
   write(*,"(A,2F14.9)")"Zero_+, Zero_-                =",gzerop,gzerom
   write(*,"(A,3F14.9)")"Occupations                   =",n11,n22,n11+n22
+  write(*,"(A,3F14.9)")"Delta indirect                =",-epmax+epmin,epmax,epmin
   if(dcflag)then
      write(*,"(A,2F14.9)")"U / DC shift of p-electrons   =",U,U/2.d0
-     write(*,"(A,2F14.9)")"p-level before/after DC shift =",ep0,ep0+dble(dcshift)*U/2.d0
+     write(*,"(A,2F14.9)")"p-level before/after DC shift =",ep0,ep0-dble(dcshift)*U/2.d0
   end if
 
 
@@ -269,6 +253,19 @@ program tdd_pam
 
 
 contains
+
+
+  function Hk_model(kx,ky) result(Hk)
+    real(8)                   :: kx,ky,epsik,vpsik
+    complex(8),dimension(2,2) :: Hk
+    epsik = cos(kx)+cos(ky)
+    vpsik = sin(kx)*sin(ky)
+    Hk(1,1) = ed0 - 2.d0*alpha*tpp*epsik
+    Hk(2,2) = ep0 - 2.d0*tpp*epsik - dble(dcshift)*U/2.d0
+    Hk(1,2) = tpd - 4.d0*v0*vpsik
+    Hk(2,1) = tpd - 4.d0*v0*vpsik
+  end function Hk_model
+
 
   function inverse_g0k(iw,hk) result(g0k)
     integer                     :: i
@@ -288,16 +285,16 @@ contains
 
   function eplus(hk)
     complex(8),dimension(2,2) :: hk
-    real(8)                   :: eplus
-    eplus = hk(1,1)+hk(2,2) + sqrt(abs(hk(1,1)-hk(2,2))**2 + 4.d0*hk(1,2)*hk(2,1) )
-    eplus = eplus/2.d0
+    real(8)                   :: eig(2),eplus
+    call matrix_diagonalize(Hk,eig)
+    eplus=eig(1)
   end function eplus
 
   function eminus(hk)
     complex(8),dimension(2,2) :: hk
-    real(8)                   :: eminus
-    eminus = hk(1,1)+hk(2,2) - sqrt(abs(hk(1,1)-hk(2,2))**2 + 4.d0*hk(1,2)*hk(2,1) )
-    eminus = eminus/2.d0
+    real(8)                   :: eig(2),eminus
+    call matrix_diagonalize(Hk,eig)
+    eminus=eig(2)
   end function eminus
 
 
@@ -315,6 +312,6 @@ contains
     uk(2,1) =-v
   end function matrix_uk
 
-end program tdd_pam
+end program
 
 
