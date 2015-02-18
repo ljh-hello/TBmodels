@@ -1,4 +1,4 @@
-! DESCRIPTION
+e e ! DESCRIPTION
 !   Solve the non-interacting 2x2 part of the BHZ model and generate the hamiltoniana matrix H(k), 
 !   Model parameters are: t_dd,v0/tpd,ep0,ed0.
 !   Using the 2d square lattice dispersion. 
