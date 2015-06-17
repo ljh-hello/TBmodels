@@ -20,7 +20,7 @@ VER = 'character(len=41),parameter :: revision = "$(REV)"' > revision.inc
 #MKLARGS=-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm
 #FFLAG +=-fpp -D_$(FPP)
 
-#INCS= -I/opt/scifor/gnu/include -I/opt/dmft_tools/gnu/include
+INCS= -I/opt/scifor/gnu/include -I/opt/dmft_tools/gnu/include
 ARGS= -ldmftt -lscifor -lfftpack -llapack -lblas -lminpack
 
 all:

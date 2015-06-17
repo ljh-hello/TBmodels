@@ -40,7 +40,7 @@ program bhz_fcc
   complex(8)                              :: w,Hloc(Nso,Nso)
   complex(8)                              :: Gmats(Nso,Nso,L),Greal(Nso,Nso,L)
   character(len=20)                       :: file,nkstring
-  logical                                 :: iexist,ibool,dcflag
+  logical                                 :: iexist,ibool,dcflag,iener
 
 
   call parse_input_variable(nkx,"NKX","inputBHZ.conf",default=25)
@@ -52,6 +52,7 @@ program bhz_fcc
   call parse_input_variable(xmu,"XMU","inputBHZ.conf",default=0.d0)
   call parse_input_variable(eps,"EPS","inputBHZ.conf",default=4.d-2)
   call parse_input_variable(beta,"BETA","inputBHZ.conf",default=1000.d0)
+  call parse_input_variable(iener,"IENER","inputBHZ.conf",default=.false.)
   call parse_input_variable(file,"FILE","inputBHZ.conf",default="hkfile_bhz.in")
   call save_input_file("inputBHZ.conf")
 
@@ -96,12 +97,9 @@ program bhz_fcc
   enddo
 
 
-  Ekin=get_kinetic_energy(Hk,L)
-  Eloc=get_local_energy(Hk,L)
-
   !solve along the standard path in the 2D BZ.
   Npts=5
-  allocate(kpath(Npts,2))
+  allocate(kpath(Npts,3))
   kpath(1,:)=kpoint_X1
   kpath(2,:)=kpoint_Gamma
   kpath(3,:)=kpoint_M1
@@ -118,12 +116,16 @@ program bhz_fcc
   close(10)
   write(*,"(A,10F14.9)")"Occupations =",(n(iorb),iorb=1,Nso),sum(n)
 
-  open(10,file="energy.nint")
-  write(10,"(3F20.12)")Ekin,Eloc,Ekin-Eloc
-  close(10)
-  write(*,"(A,F14.9)")"<K>           =",Ekin
-  write(*,"(A,F14.9)")"<E0>          =",Eloc
+  if(iener)then
+     Ekin=get_kinetic_energy(Hk,L)
+     Eloc=get_local_energy(Hk,L)
 
+     open(10,file="energy.nint")
+     write(10,"(3F20.12)")Ekin,Eloc,Ekin-Eloc
+     close(10)
+     write(*,"(A,F14.9)")"<K>           =",Ekin
+     write(*,"(A,F14.9)")"<E0>          =",Eloc
+  endif
   deallocate(Kpath,kxgrid,Hk)
 
 
