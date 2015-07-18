@@ -28,11 +28,13 @@ program bhz_fcc
   integer                                 :: Nk,Nktot,Nkpath,Nkx,Npts
   integer                                 :: i,j,k,ik,iorb,jorb
   integer                                 :: ix,iy,iz
-  real(8)                                 :: kx,ky,kz
+  real(8)                                 :: kx,ky,kz,kvec(2)
   real(8),dimension(:),allocatable        :: kxgrid
-  real(8),dimension(:,:),allocatable      :: kpath
+  real(8),dimension(:,:),allocatable      :: kpath,ktrims,ddk
   complex(8),dimension(:,:,:),allocatable :: Hk
 
+  real(8) :: chern,z2
+  real(8),dimension(:,:,:),allocatable :: nkgrid
   real(8)                                 :: mh,rh,lambda,delta
   real(8)                                 :: xmu,beta,eps,Ekin,Eloc
   real(8),dimension(L)                    :: wm,wr
@@ -53,8 +55,12 @@ program bhz_fcc
   call parse_input_variable(eps,"EPS","inputBHZ.conf",default=4.d-2)
   call parse_input_variable(beta,"BETA","inputBHZ.conf",default=1000.d0)
   call parse_input_variable(iener,"IENER","inputBHZ.conf",default=.false.)
+  call parse_input_variable(kvec,"kvec","inputBHZ.conf",default=[0d0,0d0])
   call parse_input_variable(file,"FILE","inputBHZ.conf",default="hkfile_bhz.in")
   call save_input_file("inputBHZ.conf")
+
+
+
 
 
   !SOLVE AND PLOT THE FULLY HOMOGENOUS PROBLEM:
@@ -62,6 +68,24 @@ program bhz_fcc
   allocate(Hk(Nso,Nso,Nktot))
   allocate(kxgrid(Nkx))
   write(*,*) "Using Nk_total="//txtfy(Nktot)
+
+  ! allocate(ddk(3,2))
+  ! print*,"nd(kx,ky) @:",kvec
+  ! print*,"and"
+  ! print*,"Dnd(kx,ky)/Dkx @:",kvec
+  ! print*,dk_model(kvec,3)
+  ! print*,nd_model(kvec,3)
+  ! call djac_dk(kvec,3,ddk)
+  ! print*,ddk(:,1)
+  ! print*,ddk(:,2)
+  ! print*,""
+  ! print*, chern_nk(kvec)
+  ! print*,""
+  ! ! print*,"early stop"
+  ! ! stop
+
+
+
   Greal = zero
   Gmats = zero 
   Hloc  = zero
@@ -77,6 +101,38 @@ program bhz_fcc
        kzgrid=[0d0])
   Hloc=sum(Hk(:,:,:),dim=3)/Nktot
   call write_Hloc(Hloc)
+
+
+  allocate(nkgrid(Nkx,Nkx,3))
+  chern=0d0
+  do i=1,Nkx
+     kx = kxgrid(i)
+     do j=1,Nkx
+        ky = kxgrid(j)
+        chern = chern - chern_nk([kx,ky])/4d0/pi
+        nkgrid(i,j,:) = nd_model([kx,ky],3)
+        write(100,"(6F18.12)")&
+             nkgrid(i,j,1)-1d-3,nkgrid(i,j,2)-1d-3,nkgrid(i,j,3)-1d-3,&
+             nkgrid(i,j,1)+1d-3,nkgrid(i,j,2)+1d-3,nkgrid(i,j,3)+1d-3
+        write(200,"(3F18.12)")&
+             nkgrid(i,j,1),nkgrid(i,j,2),nkgrid(i,j,3)
+        write(300,"(6F18.12)")&
+             kx,ky,0d0, &
+             nkgrid(i,j,1),nkgrid(i,j,2),nkgrid(i,j,3)
+     enddo
+  enddo
+  print*,chern*(2*pi/Nkx)*(2*pi/Nkx)  
+  chern=-simps2d(chern_nk,[-pi,pi],[-pi,pi],N0=200,iterative=.false.)
+  print*,chern/4d0/pi
+
+  allocate(ktrims(2,4))
+  ktrims=reshape( [ [0d0,0d0] , [0d0,pi] , [pi,0d0] , [pi,pi] ] , shape(ktrims))
+  z2 = z2_number(ktrims,[2,4])
+  open(100,file="z2_invariant.nint")
+  write(100,*) z2
+  print*,z2
+  close(100)
+
 
   !Build the local GF:
   wm = pi/beta*real(2*arange(1,L)-1,8)
@@ -129,10 +185,88 @@ program bhz_fcc
   deallocate(Kpath,kxgrid,Hk)
 
 
-
-
-
 contains
+
+  function z2_number(ktrims,band_indices) result(z2)
+    real(8),dimension(:,:),intent(in)       :: ktrims
+    integer,dimension(:),intent(in)         :: band_indices
+    complex(8),dimension(:,:,:),allocatable :: Htrims
+    real(8),dimension(:,:),allocatable      :: Etrims
+    complex(8),dimension(:),allocatable     :: Delta
+    real(8)                                 :: z2
+    integer                                 :: i,j,Ntrim,itrim,Nocc
+    !
+    Ntrim=size(Ktrims,2)
+    Nocc = size(band_indices)
+    allocate(Htrims(Nso,Nso,Ntrim),Etrims(Nocc,Ntrim))
+    allocate(Delta(Ntrim))
+    !
+    do itrim=1,Ntrim
+       Htrims(:,:,itrim) = hk_model(Ktrims(:,itrim),Nso)
+       ! do i=1,Nocc
+       !    j=band_indices(i)
+       !    Etrims(i,itrim)=-(Htrims(j,j,itrim))/abs(Htrims(j,j,itrim))
+       ! enddo
+       !Delta(itrim)=product(sqrt(one*Etrims(:,itrim)))
+       print*,itrim,dreal(Htrims(1,1,itrim))
+       Delta(itrim)=-sign(1d0,dreal(Htrims(1,1,itrim)))
+    enddo
+    z2=product(Delta(:))
+    ! z2=product(sqrt(one*Etrims(1,1:Ntrim)))*product(sqrt(one*Etrims(2,1:Ntrim)))
+    if(z2>0)then
+       z2=0d0
+    else
+       z2=1d0
+    end if
+  end function z2_number
+
+
+  function dk_model(kpoint,M) result(dk)
+    real(8),dimension(:),intent(in) :: kpoint
+    integer                         :: M
+    real(8),dimension(M)            :: dk
+    real(8)                         :: kx,ky
+    kx=kpoint(1)
+    ky=kpoint(2)
+    dk=[lambda*sin(kx),lambda*sin(ky),(mh-cos(kx)-cos(ky))]
+  end function dk_model
+
+
+  function nd_model(kpoint,M) result(dk)
+    real(8),dimension(:),intent(in) :: kpoint
+    integer                         :: M
+    real(8),dimension(M)            :: dk
+    real(8)                         :: kx,ky,norm
+    kx=kpoint(1)
+    ky=kpoint(2)
+    dk=[lambda*sin(kx),lambda*sin(ky),(mh-cos(kx)-cos(ky))]
+    norm = dot_product(dk,dk)
+    dk = dk/sqrt(norm)
+    where(abs(dk)<1.d-12)dk=0d0
+  end function nd_model
+
+
+  subroutine djac_dk(kpoint,M,ddk)
+    real(8),dimension(:)            :: kpoint
+    real(8),dimension(size(kpoint)) :: k_
+    integer                         :: M
+    real(8),dimension(M)            :: fvec,wa1
+    real(8)                         :: ddk(M,size(kpoint))
+    call djacobian(nd_model,kpoint,M,ddk)
+  end subroutine djac_dk
+
+  function chern_nk(kpoint) result(ck)
+    real(8),dimension(:) :: kpoint
+    real(8) :: dk(3),dk_(3)
+    real(8) :: ddk(3,2)
+    real(8) :: ck,norm
+    dk  = nd_model(kpoint,3)
+    call djac_dk(kpoint,3,ddk)
+    ck  = s3_product(dk,ddk(:,1),ddk(:,2))
+  end function chern_nk
+
+
+
 
 
   function hk_model(kpoint,N) result(hk)
@@ -146,39 +280,16 @@ contains
     Hk          = zero
     Hk(1:2,1:2) = hk_bhz2x2(kx,ky)
     Hk(3:4,3:4) = conjg(hk_bhz2x2(-kx,-ky))
+    Hk(1,4) = -delta ; Hk(4,1)=-delta
+    Hk(2,3) =  delta ; Hk(3,2)= delta
+    Hk(1,3) = xi*rh*(sin(kx)-xi*sin(ky))
+    Hk(3,1) =-xi*rh*(sin(kx)+xi*sin(ky))
   end function hk_model
   function hk_bhz2x2(kx,ky) result(hk)
     real(8)                   :: kx,ky
     complex(8),dimension(2,2) :: hk
     hk = (mh-cos(kx)-cos(ky))*pauli_tau_z + lambda*sin(kx)*pauli_tau_x + lambda*sin(ky)*pauli_tau_y 
   end function hk_bhz2x2
-  ! function hk_model(kpoint,N) result(hk)
-  !   real(8),dimension(:)      :: kpoint
-  !   integer                   :: N
-  !   real(8)                   :: kx,ky
-  !   complex(8),dimension(N,N) :: hk
-  !   if(size(kpoint)/=3)stop "hk_model: error in kpoint dimensions"
-  !   if(N/=4)stop "hk_model: error in N dimensions"
-  !   kx=kpoint(1)
-  !   ky=kpoint(2)
-  !   Hk          = zero
-  !   Hk(1:2,1:2) = hk_bhz2x2(kx,ky)
-  !   Hk(3:4,3:4) = conjg(hk_bhz2x2(-kx,-ky))
-  !   Hk(1,4) = -delta ; Hk(4,1)=-delta
-  !   Hk(2,3) =  delta ; Hk(3,2)= delta
-  !   Hk(1,3) = xi*rh*(sin(kx)-xi*sin(ky))
-  !   Hk(3,1) =-xi*rh*(sin(kx)+xi*sin(ky))
-  ! end function hk_model
-  ! function hk_bhz2x2(kx,ky) result(hk)
-  !   real(8)                   :: kx,ky
-  !   complex(8),dimension(2,2) :: hk
-  !   real(8)                   :: epsik
-  !   epsik   = cos(kx)+cos(ky)
-  !   hk(1,1) = mh - epsik
-  !   hk(2,2) =-conjg(hk(1,1))!-mh + epsik
-  !   hk(1,2) = lambda*(sin(kx)-xi*sin(ky))
-  !   hk(2,1) = lambda*(sin(kx)+xi*sin(ky))
-  ! end function hk_bhz2x2
 
 
   function inverse_g0k(iw,hk) result(g0k)
@@ -190,9 +301,8 @@ contains
        g0k(1:2,1:2) = inverse_g0k2x2(iw,hk(1:2,1:2))
        g0k(3:4,3:4) = inverse_g0k2x2(iw,hk(3:4,3:4))
     else
-       g0k = -hk
-       forall(i=1:4)g0k(i,i) = iw + xmu + g0k(i,i)
-       call matrix_inverse(g0k)
+       g0k = (iw + xmu)*zeye(4)-hk
+       call inv(g0k)
     endif
   end function inverse_g0k
   !
@@ -205,60 +315,12 @@ contains
     g0k=zero
     delta = iw - hk(1,1)
     ppi   = iw - hk(2,2)
-    vmix  = -hk(1,2)
+    vmix  =    -hk(1,2)
     g0k(1,1) = one/(delta - abs(vmix)**2/ppi)
     g0k(2,2) = one/(ppi - abs(vmix)**2/delta)
     g0k(1,2) = -vmix/(ppi*delta - abs(vmix)**2)
     g0k(2,1) = conjg(g0k(1,2))
   end function inverse_g0k2x2
-
-  ! function Eigk(hk) result(eig)
-  !   complex(8),dimension(4,4) :: hk
-  !   real(8),dimension(4)      :: eig
-  !   !call matrix_diagonalize(hk,eig)
-  !   ! call matrix_diagonalize(hk(1:2,1:2),eig(1:2))
-  !   ! call matrix_diagonalize(hk(3:4,3:4),eig(3:4))
-  !   eig(1:2) = eigk2x2(hk(1:2,1:2))
-  !   eig(3:4) = eigk2x2(hk(3:4,3:4))
-  ! end function Eigk
-
-  ! function Eigk2x2(hk) result(eig)
-  !   complex(8),dimension(2,2) :: hk
-  !   real(8),dimension(2)      :: eig
-  !   complex(8)                :: delta0,vk2,sqrt0,u,v
-  !   delta0 = (hk(1,1)-hk(2,2))
-  !   vk2    = 4.d0*hk(1,2)*hk(2,1)
-  !   sqrt0  = sqrt( abs(delta0)**2 + vk2 )
-  !   eig(1)=hk(1,1)+hk(2,2) + sqrt0
-  !   eig(2)=hk(1,1)+hk(2,2) - sqrt0
-  !   eig = eig/2.d0
-  !   if(sqrt0==0.d0)then
-  !      u=sqrt(0.5d0)
-  !      v=u
-  !   else
-  !      u = sqrt(0.5d0*(1.d0 + delta0/sqrt0))
-  !      v = sqrt(0.5d0*(1.d0 - delta0/sqrt0))
-  !   endif
-  !   hk(1,1) = u
-  !   hk(2,1) = -v
-  !   hk(1,2) = v
-  !   hk(2,2) = u
-  ! end function Eigk2x2
-
-
-  ! function matrix_uk(hk) result(uk)
-  !   complex(8),dimension(2,2) :: hk
-  !   complex(8),dimension(2,2) :: uk
-  !   complex(8) :: delta0,ek,u,v
-  !   delta0 = -(hk(1,1)-hk(2,2))
-  !   ek     = sqrt( delta0**2 + 4.d0*hk(1,2)*hk(2,1) )
-  !   u = sqrt(0.5d0*(1.d0 - delta0/ek))
-  !   v = sqrt(0.5d0*(1.d0 + delta0/ek))
-  !   uk(1,1) = u
-  !   uk(1,2) = v
-  !   uk(2,1) =-v
-  !   uk(2,2) = u
-  ! end function matrix_uk
 
 
 
