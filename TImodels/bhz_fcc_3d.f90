@@ -11,8 +11,7 @@ program bhz_3d
   real(8),dimension(:),allocatable        :: kxgrid
   real(8),dimension(:,:),allocatable      :: kpath,ktrims
   complex(8),dimension(:,:,:),allocatable :: Hk
-
-  real(8)                                 :: ez,mh,rh,lambda,delta
+  real(8)                                 :: ez,mh,rh,lambda,delta,lz
   real(8)                                 :: xmu,beta,eps,Ekin,Eloc
   real(8),dimension(L)                    :: wm,wr
   real(8)                                 :: n(Nso)
@@ -25,6 +24,7 @@ program bhz_3d
   call parse_input_variable(nkx,"NKX","inputBHZ.conf",default=25)
   call parse_input_variable(nkpath,"NKPATH","inputBHZ.conf",default=500)
   call parse_input_variable(ez,"ez","inputBHZ.conf",default=1d0)
+  call parse_input_variable(lz,"lz","inputBHZ.conf",default=1d0)
   call parse_input_variable(mh,"MH","inputBHZ.conf",default=3.d0)
   call parse_input_variable(lambda,"LAMBDA","inputBHZ.conf",default=0.3d0)
   call parse_input_variable(xmu,"XMU","inputBHZ.conf",default=0.d0)
@@ -57,6 +57,7 @@ program bhz_3d
   call write_Hloc(Hloc)
 
 
+
   !Evaluate the Z2 index:
   !STRONG TI
   z2(1) = z2_number(reshape( [ [0,0,0] , [1,0,0] , [1,1,0] , [0,1,0] , [0,1,1] , [0,0,1] , [1,0,1] , [1,1,1] ] , [3,8] )*pi)
@@ -73,23 +74,35 @@ program bhz_3d
 
 
   !solve along the standard path in the 2D BZ.
-  Npts=9
+  Npts=8
   allocate(kpath(Npts,3))
-  kpath(1,:)=[0,0,0]!G
-  kpath(2,:)=[1,0,0]!X
+  ! kpath(1,:)=[0,0,0]!G
+  ! kpath(2,:)=[1,0,0]!X
+  ! kpath(3,:)=[1,1,0]!M
+  ! kpath(4,:)=[0,0,0]!G
+  ! kpath(5,:)=[1,1,1]!R
+  ! kpath(6,:)=[1,0,1]!M
+  ! kpath(7,:)=[0,0,1]!Z
+  ! kpath(8,:)=[1,1,1]!R
+  ! kpath(9,:)=[0,0,0]!G
+  ! kpath(10,:)=[0,0,1]!Z
+  kpath(1,:)=[0,1,0]!X
+  kpath(2,:)=[0,0,0]!G
   kpath(3,:)=[1,1,0]!M
-  kpath(4,:)=[0,0,0]!G
-  kpath(5,:)=[1,1,1]!R
-  kpath(6,:)=[1,0,1]!M
-  kpath(7,:)=[0,0,1]!X
-  kpath(8,:)=[1,1,1]!R
-  kpath(9,:)=[0,0,0]!G
+  kpath(4,:)=[1,1,1]!R
+  kpath(5,:)=[0,0,1]!Z
+  kpath(6,:)=[1,0,1]!A
+  kpath(7,:)=[0,0,0]!G
+  kpath(8,:)=[0,0,1]!Z
   kpath=kpath*pi
   call solve_Hk_along_BZpath(Hk_model,Nso,kpath,Nkpath,&
        colors_name=[character(len=20) :: 'red','blue','red','blue'],&
-       points_name=[character(len=20) :: "G","X","M","G","R","M","X","R","G"],&
+                                !points_name=[character(len=20) :: "G","X","M","G","R","M","Z","R","G","Z"],&
+       points_name=[character(len=20) :: "X","G","M","R","Z","A","G","Z"],&
        file="Eigenband.nint")
-  !plot observables
+
+
+
 
 
 
@@ -184,8 +197,8 @@ contains
     Hk(3:4,3:4) = conjg( &
          (Mh-cos(-kx) - cos(-ky) - ez*cos(-kz))*pauli_tau_z +&
          lambda*sin(-kx)*pauli_tau_x + lambda*sin(-ky)*pauli_tau_y)
-    Hk(1:2,3:4) = lambda*sin(kz)*pauli_tau_x
-    Hk(3:4,1:2) = lambda*sin(kz)*pauli_tau_x
+    Hk(1:2,3:4) = lz*lambda*sin(kz)*pauli_tau_x
+    Hk(3:4,1:2) = lz*lambda*sin(kz)*pauli_tau_x
   end function hk_model
 
   function inverse_g0k(iw,hk) result(g0k)

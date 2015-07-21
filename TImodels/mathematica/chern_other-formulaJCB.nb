@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       158,          7]
-NotebookDataLength[    365587,       6248]
-NotebookOptionsPosition[    363904,       6194]
-NotebookOutlinePosition[    364246,       6209]
-CellTagsIndexPosition[    364203,       6206]
+NotebookDataLength[    366091,       6260]
+NotebookOptionsPosition[    364365,       6205]
+NotebookOutlinePosition[    364707,       6220]
+CellTagsIndexPosition[    364664,       6217]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -6115,7 +6115,18 @@ coloring.\\\\\\\"\\\", \\\"MT\\\"]\\) \\!\\(\\*ButtonBox[\\\"\[RightSkeleton]\
 \\\", ButtonStyle->\\\"Link\\\", ButtonFrame->None, \
 ButtonData:>\\\"paclet:ref/Plot3D\\\", ButtonNote -> \
 \\\"Plot3D::legacycolfunc\\\"]\\)\"\>"}]], "Message", "MSG",
- CellChangeTimes->{3.646033947195636*^9}]
+ CellChangeTimes->{3.646033947195636*^9}],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"Plot3D", "::", "\<\"legacycolfunc\"\>"}], 
+  RowBox[{
+  ":", " "}], "\<\"\\!\\(\\*StyleBox[\\\"\\\\\\\"Use ColorFunction to specify \
+coloring.\\\\\\\"\\\", \\\"MT\\\"]\\) \\!\\(\\*ButtonBox[\\\"\[RightSkeleton]\
+\\\", ButtonStyle->\\\"Link\\\", ButtonFrame->None, \
+ButtonData:>\\\"paclet:ref/Plot3D\\\", ButtonNote -> \
+\\\"Plot3D::legacycolfunc\\\"]\\)\"\>"}]], "Message", "MSG",
+ CellChangeTimes->{3.64639714956091*^9}]
 }, Open  ]],
 
 Cell[CellGroupData[{
@@ -6244,11 +6255,12 @@ Cell[358493, 6064, 461, 9, 23, "Message"],
 Cell[358957, 6075, 459, 9, 23, "Message"],
 Cell[359419, 6086, 459, 9, 23, "Message"],
 Cell[359881, 6097, 459, 9, 23, "Message"],
-Cell[360343, 6108, 459, 9, 23, "Message"]
+Cell[360343, 6108, 459, 9, 23, "Message"],
+Cell[360805, 6119, 458, 9, 23, "Message"]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[360839, 6122, 1069, 27, 43, "Input"],
-Cell[361911, 6151, 1977, 40, 339, "Output"]
+Cell[361300, 6133, 1069, 27, 43, "Input"],
+Cell[362372, 6162, 1977, 40, 339, "Output"]
 }, Open  ]]
 }
 ]
