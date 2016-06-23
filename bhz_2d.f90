@@ -24,25 +24,26 @@ program bhz_fcc
   USE DMFT_TOOLS
   implicit none
 
-  integer,parameter                       :: L=2048,Norb=2,Nspin=2,Nso=Nspin*Norb
+  integer,parameter                       :: L=1024,Norb=2,Nspin=2,Nso=Nspin*Norb
   integer                                 :: Nk,Nktot,Nkpath,Nkx,Npts
   integer                                 :: i,j,k,ik,iorb,jorb
   integer                                 :: ix,iy,iz
   real(8)                                 :: kx,ky,kz,kvec(2)
   real(8),dimension(:),allocatable        :: kxgrid
-  real(8),dimension(:,:),allocatable      :: kpath,ktrims,ddk
+  real(8),dimension(:,:),allocatable      :: kpath,ktrims,ddk,berry_curvature
   complex(8),dimension(:,:,:),allocatable :: Hk
+  complex(8),dimension(:,:,:),allocatable :: State
 
-  real(8) :: chern,z2
-  real(8),dimension(:,:,:),allocatable :: nkgrid
+  real(8)                                 :: chern,z2
+  real(8),dimension(:,:,:),allocatable    :: nkgrid
   real(8)                                 :: mh,rh,lambda,delta
   real(8)                                 :: xmu,beta,eps,Ekin,Eloc
   real(8),dimension(L)                    :: wm,wr
-  real(8)                                 :: n(Nso)
-  complex(8)                              :: w,Hloc(Nso,Nso)
+  real(8)                                 :: n(Nso),eigval(Norb)
+  complex(8)                              :: w,Hloc(Nso,Nso),Eigvec(Norb,Norb)
   complex(8)                              :: Gmats(Nso,Nso,L),Greal(Nso,Nso,L)
   character(len=20)                       :: file,nkstring
-  logical                                 :: iexist,ibool,dcflag,iener
+  logical                                 :: iexist,ibool,iener
 
 
   call parse_input_variable(nkx,"NKX","inputBHZ.conf",default=25)
@@ -69,28 +70,12 @@ program bhz_fcc
   allocate(kxgrid(Nkx))
   write(*,*) "Using Nk_total="//txtfy(Nktot)
 
-  ! allocate(ddk(3,2))
-  ! print*,"nd(kx,ky) @:",kvec
-  ! print*,"and"
-  ! print*,"Dnd(kx,ky)/Dkx @:",kvec
-  ! print*,dk_model(kvec,3)
-  ! print*,nd_model(kvec,3)
-  ! call djac_dk(kvec,3,ddk)
-  ! print*,ddk(:,1)
-  ! print*,ddk(:,2)
-  ! print*,""
-  ! print*, chern_nk(kvec)
-  ! print*,""
-  ! ! print*,"early stop"
-  ! ! stop
-
-
-
   Greal = zero
   Gmats = zero 
   Hloc  = zero
   kxgrid = kgrid(Nkx)
-  Hk = build_hk_model(hk_model,Nso,kxgrid,kxgrid,[0d0])
+  Hk = TB_build_model(hk_model,Nso,kxgrid,kxgrid,[0d0])
+
   call write_hk_w90(trim(file),Nso,&
        Nd=Norb,&
        Np=1,   &
@@ -102,15 +87,23 @@ program bhz_fcc
   Hloc=sum(Hk(:,:,:),dim=3)/Nktot
   call write_Hloc(Hloc)
 
-
+  allocate(state(Norb,Nkx,Nkx))
   allocate(nkgrid(Nkx,Nkx,3))
+  allocate(Berry_curvature(Nkx,Nkx))
   chern=0d0
+  ik=0
   do i=1,Nkx
      kx = kxgrid(i)
      do j=1,Nkx
         ky = kxgrid(j)
+        ik=ik+1
         chern = chern - chern_nk([kx,ky])/4d0/pi
         nkgrid(i,j,:) = nd_model([kx,ky],3)
+
+        Eigvec = Hk(1:Norb,1:Norb,ik)
+        call eigh(Eigvec,Eigval)
+        state(:,i,j) = Eigvec(:,1)
+
         write(100,"(6F18.12)")&
              nkgrid(i,j,1)-1d-3,nkgrid(i,j,2)-1d-3,nkgrid(i,j,3)-1d-3,&
              nkgrid(i,j,1)+1d-3,nkgrid(i,j,2)+1d-3,nkgrid(i,j,3)+1d-3
@@ -125,14 +118,17 @@ program bhz_fcc
   chern=-simps2d(chern_nk,[-pi,pi],[-pi,pi],N0=200,iterative=.false.)
   print*,chern/4d0/pi
 
+  call Get_Chern_number(state,chern,Berry_curvature,Nkx/pi2*Nkx/pi2)
+  print*,chern
+  call splot3d("Berry_Curvature.nint",kxgrid,kxgrid,Berry_Curvature)
+
+
   allocate(ktrims(2,4))
   ktrims=reshape( [ [0d0,0d0] , [0d0,pi] , [pi,0d0] , [pi,pi] ] , shape(ktrims))
   z2 = z2_number(ktrims,[2,4])
   open(100,file="z2_invariant.nint")
   write(100,*) z2
-  print*,z2
   close(100)
-
 
   !Build the local GF:
   wm = pi/beta*real(2*arange(1,L)-1,8)
@@ -153,6 +149,8 @@ program bhz_fcc
   enddo
 
 
+  call get_shcond()
+
   !solve along the standard path in the 2D BZ.
   Npts=5
   allocate(kpath(Npts,3))
@@ -161,12 +159,13 @@ program bhz_fcc
   kpath(3,:)=kpoint_M1
   kpath(4,:)=kpoint_X1
   kpath(5,:)=kpoint_Gamma
-  call solve_Hk_along_BZpath(Hk_model,Nso,kpath,Nkpath,&
-       colors_name=[character(len=20) :: 'red','blue','red','blue'],&
+  call TB_Solve_path(Hk_model,Nso,kpath,Nkpath,&
+       colors_name=[red1,blue1],&
        points_name=[character(len=20) :: 'X', 'G', 'M', 'X', 'G'],&
        file="Eigenband.nint")
-  !plot observables
 
+
+  !plot observables
   open(10,file="observables.nint")
   write(10,"(10F20.12)")(n(iorb),iorb=1,Nso),sum(n)
   close(10)
@@ -186,85 +185,6 @@ program bhz_fcc
 
 
 contains
-
-  function z2_number(ktrims,band_indices) result(z2)
-    real(8),dimension(:,:),intent(in)       :: ktrims
-    integer,dimension(:),intent(in)         :: band_indices
-    complex(8),dimension(:,:,:),allocatable :: Htrims
-    real(8),dimension(:,:),allocatable      :: Etrims
-    complex(8),dimension(:),allocatable     :: Delta
-    real(8)                                 :: z2
-    integer                                 :: i,j,Ntrim,itrim,Nocc
-    !
-    Ntrim=size(Ktrims,2)
-    Nocc = size(band_indices)
-    allocate(Htrims(Nso,Nso,Ntrim),Etrims(Nocc,Ntrim))
-    allocate(Delta(Ntrim))
-    !
-    do itrim=1,Ntrim
-       Htrims(:,:,itrim) = hk_model(Ktrims(:,itrim),Nso)
-       ! do i=1,Nocc
-       !    j=band_indices(i)
-       !    Etrims(i,itrim)=-(Htrims(j,j,itrim))/abs(Htrims(j,j,itrim))
-       ! enddo
-       !Delta(itrim)=product(sqrt(one*Etrims(:,itrim)))
-       print*,itrim,dreal(Htrims(1,1,itrim))
-       Delta(itrim)=-sign(1d0,dreal(Htrims(1,1,itrim)))
-    enddo
-    z2=product(Delta(:))
-    ! z2=product(sqrt(one*Etrims(1,1:Ntrim)))*product(sqrt(one*Etrims(2,1:Ntrim)))
-    if(z2>0)then
-       z2=0d0
-    else
-       z2=1d0
-    end if
-  end function z2_number
-
-
-  function dk_model(kpoint,M) result(dk)
-    real(8),dimension(:),intent(in) :: kpoint
-    integer                         :: M
-    real(8),dimension(M)            :: dk
-    real(8)                         :: kx,ky
-    kx=kpoint(1)
-    ky=kpoint(2)
-    dk=[lambda*sin(kx),lambda*sin(ky),(mh-cos(kx)-cos(ky))]
-  end function dk_model
-
-
-  function nd_model(kpoint,M) result(dk)
-    real(8),dimension(:),intent(in) :: kpoint
-    integer                         :: M
-    real(8),dimension(M)            :: dk
-    real(8)                         :: kx,ky,norm
-    kx=kpoint(1)
-    ky=kpoint(2)
-    dk=[lambda*sin(kx),lambda*sin(ky),(mh-cos(kx)-cos(ky))]
-    norm = dot_product(dk,dk)
-    dk = dk/sqrt(norm)
-    where(abs(dk)<1.d-12)dk=0d0
-  end function nd_model
-
-
-  subroutine djac_dk(kpoint,M,ddk)
-    real(8),dimension(:)            :: kpoint
-    real(8),dimension(size(kpoint)) :: k_
-    integer                         :: M
-    real(8),dimension(M)            :: fvec,wa1
-    real(8)                         :: ddk(M,size(kpoint))
-    call djacobian(nd_model,kpoint,M,ddk)
-  end subroutine djac_dk
-
-  function chern_nk(kpoint) result(ck)
-    real(8),dimension(:) :: kpoint
-    real(8) :: dk(3),dk_(3)
-    real(8) :: ddk(3,2)
-    real(8) :: ck,norm
-    dk  = nd_model(kpoint,3)
-    call djac_dk(kpoint,3,ddk)
-    ck  = s3_product(dk,ddk(:,1),ddk(:,2))
-  end function chern_nk
-
 
 
 
@@ -290,6 +210,30 @@ contains
     complex(8),dimension(2,2) :: hk
     hk = (mh-cos(kx)-cos(ky))*pauli_tau_z + lambda*sin(kx)*pauli_tau_x + lambda*sin(ky)*pauli_tau_y 
   end function hk_bhz2x2
+
+
+
+  function vkx_model(kpoint,N) result(vkx)
+    real(8),dimension(:)      :: kpoint
+    real(8)                   :: kx
+    complex(8),dimension(N,N) :: vkx
+    integer                   :: N
+    kx=kpoint(1)
+    vkx = zero
+    vkx(1:2,1:2) = sin(kx)*pauli_tau_z + lambda*cos(kx)*pauli_tau_x
+    vkx(3:4,3:4) = conjg(sin(-kx)*pauli_tau_z + lambda*cos(-kx)*pauli_tau_x) 
+  end function vkx_model
+
+  function vky_model(kpoint,N) result(vky)
+    real(8),dimension(:)      :: kpoint
+    real(8)                   :: ky
+    complex(8),dimension(N,N) :: vky
+    integer                   :: N
+    ky=kpoint(2)
+    vky = zero
+    vky(1:2,1:2) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
+    vky(3:4,3:4) = conjg(sin(-ky)*pauli_tau_z + lambda*cos(-ky)*pauli_tau_y) 
+  end function vky_model
 
 
   function inverse_g0k(iw,hk) result(g0k)
@@ -457,6 +401,163 @@ contains
        tr=tr+M(i,i)
     enddo
   end function trace_matrix
+
+
+
+
+  function z2_number(ktrims,band_indices) result(z2)
+    real(8),dimension(:,:),intent(in)       :: ktrims
+    integer,dimension(:),intent(in)         :: band_indices
+    complex(8),dimension(:,:,:),allocatable :: Htrims
+    real(8),dimension(:,:),allocatable      :: Etrims
+    complex(8),dimension(:),allocatable     :: Delta
+    real(8)                                 :: z2
+    integer                                 :: i,j,Ntrim,itrim,Nocc
+    !
+    Ntrim=size(Ktrims,2)
+    Nocc = size(band_indices)
+    allocate(Htrims(Nso,Nso,Ntrim),Etrims(Nocc,Ntrim))
+    allocate(Delta(Ntrim))
+    !
+    do itrim=1,Ntrim
+       Htrims(:,:,itrim) = hk_model(Ktrims(:,itrim),Nso)
+       Delta(itrim)=-sign(1d0,dreal(Htrims(1,1,itrim)))
+    enddo
+    z2=product(Delta(:))
+    if(z2>0)then
+       z2=0d0
+    else
+       z2=1d0
+    end if
+  end function z2_number
+
+
+
+  function nd_model(kpoint,M) result(dk)
+    real(8),dimension(:),intent(in) :: kpoint
+    integer                         :: M
+    real(8),dimension(M)            :: dk
+    real(8)                         :: kx,ky,norm
+    kx=kpoint(1)
+    ky=kpoint(2)
+    dk=[lambda*sin(kx),lambda*sin(ky),(mh-cos(kx)-cos(ky))]
+    norm = dot_product(dk,dk)
+    dk = dk/sqrt(norm)
+    where(abs(dk)<1.d-12)dk=0d0
+  end function nd_model
+
+
+  subroutine djac_dk(kpoint,M,ddk)
+    real(8),dimension(:)            :: kpoint
+    real(8),dimension(size(kpoint)) :: k_
+    integer                         :: M
+    real(8),dimension(M)            :: fvec,wa1
+    real(8)                         :: ddk(M,size(kpoint))
+    call djacobian(nd_model,kpoint,M,ddk)
+  end subroutine djac_dk
+
+  function chern_nk(kpoint) result(ck)
+    real(8),dimension(:) :: kpoint
+    real(8) :: dk(3),dk_(3)
+    real(8) :: ddk(3,2)
+    real(8) :: ck,norm
+    dk  = nd_model(kpoint,3)
+    call djac_dk(kpoint,3,ddk)
+    ck  = s3_product(dk,ddk(:,1),ddk(:,2))
+  end function chern_nk
+
+
+  subroutine get_shcond()
+    real(8),dimension(L)                :: wm,vm
+    complex(8),dimension(2,2)           :: g0k,KerU,KerD
+    complex(8),dimension(2,2,2,Nktot,L) :: Gk
+    complex(8),dimension(L)             :: Kmats
+    complex(8),dimension(2,2,2,Nktot)   :: Vkx,Vky
+    complex(8)                          :: Ksum
+    real(8)                             :: kx,ky,C_qsh
+    integer                             :: iw,iv,ik,i,j
+    wm = pi/beta*real(2*arange(1,L)-1,8)
+    vm = pi/beta*real(2*arange(1,L)-2,8)
+    Kmats=zero
+    ik=0
+    do i=1,Nkx
+       kx = kxgrid(i)
+       do j=1,Nkx
+          ky = kxgrid(j)
+          ik=ik+1
+          Vkx(1,:,:,ik) = sin(kx)*pauli_tau_z + lambda*cos(kx)*pauli_tau_x
+          Vky(1,:,:,ik) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
+          Vkx(2,:,:,ik) = sin(kx)*pauli_tau_z - lambda*cos(kx)*pauli_tau_x
+          Vky(2,:,:,ik) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
+          do iw=1,L
+             g0k = (xi*wm(iw)+xmu)*eye(2)-hk_bhz2x2(kx,ky)
+             call inv(g0k)
+             Gk(1,:,:,ik,iw) = g0k
+             g0k = (xi*wm(iw)+xmu)*eye(2)-conjg(hk_bhz2x2(-kx,-ky))
+             call inv(g0k)
+             Gk(2,:,:,ik,iw) = g0k
+          enddo
+       enddo
+    enddo
+    call start_timer
+    do iv=1,L
+       Ksum=zero
+       do iw=1,L-iv+1
+          do ik=1,Nktot
+             KerU = matmul( Vky(1,:,:,ik) , Gk(1,:,:,ik,iw+iv-1) )
+             KerU = matmul( KerU          , Vkx(1,:,:,ik)      )
+             KerU = matmul( KerU          , Gk(1,:,:,ik,iw)    )
+             KerD = matmul( Vky(2,:,:,ik) , Gk(2,:,:,ik,iw+iv-1) )
+             KerD = matmul( KerD          , Vkx(2,:,:,ik)      )
+             KerD = matmul( KerD          , Gk(2,:,:,ik,iw)    )
+             Ksum = Ksum + trace_matrix(KerU,2)-trace_matrix(KerD,2)
+          enddo
+       enddo
+       Kmats(iv) = -Ksum/beta*2*pi/Nktot
+       call eta(iv,L)
+    enddo
+    call stop_timer
+    C_qsh = dreal(Kmats(2))/vm(2)
+    open(100,file="qsh_conductance.nint")
+    write(100,*) C_qsh
+    close(100)
+    print*,C_qsh
+  end subroutine get_shcond
+
+
+
+  ! calcola il numero di chern di un generico stato dipendente da k con il metodo di Resta
+  subroutine Get_Chern_number(State,Chern_number,Berry_curvatures,one_over_area)
+    complex(8),intent(in),dimension(:,:,:)                     :: state !(nhilb, nk1, nk2)
+    real(8),intent(out)                                        :: chern_number
+    real(8),intent(out),dimension(size(state,2),size(state,3)) :: berry_curvatures
+    real(8),intent(in)                                         :: one_over_area
+    integer                                                    :: nhilb,nk1,nk2
+    integer                                                    :: i1,i2,i3,ix,i1p,i1m,i2m,i2p,it
+    complex(8)                                                 :: path_scalar_products(4)
+    real(8)                                                    :: berry_phase
+    !
+    Nhilb= size(state,1)
+    Nk1  = size(state,2)
+    Nk2  = size(state,3)
+    chern_number = zero
+    do i1= 1, nk1
+       i1p = modulo(i1,nk1) + 1
+       i1m = modulo(i1-2,nk1) + 1
+       do i2= 1, nk2           !faccio l'integrale sulla bz
+          i2p = modulo(i2,nk2) + 1
+          i2m = modulo(i2-2,nk2) + 1
+          path_scalar_products(1) = dot_product(state(:,i1,i2),state(:,i1, i2p))
+          path_scalar_products(2) = dot_product(state(:,i1,i2p),state(:,i1p, i2p))
+          path_scalar_products(3) = dot_product(state(:,i1p,i2p),state(:,i1p, i2))
+          path_scalar_products(4) = dot_product(state(:,i1p,i2),state(:,i1,i2))
+          berry_phase = -dimag(zlog( product(path_scalar_products)  ))
+          berry_curvatures(i1,i2) = berry_phase*one_over_area
+          chern_number = chern_number + berry_phase
+       enddo
+    enddo
+    chern_number = chern_number/pi2
+  end subroutine get_chern_number
 
 
 end program bhz_fcc
