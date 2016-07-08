@@ -11,10 +11,8 @@ subroutine buildfullprojectors (p_projector,q_projector, nky,nx)
   complex(kind=idp), intent(in) :: p_projector(nky,nx,nx), q_projector(nky,nx,nx)
   integer                       :: ik, jy1, jy2, jx1, jx2, jr1, jr2
   complex(kind=idp)             :: bloch_phase
-
   full_p_projector = zzero
   full_q_projector = zzero
-
   loop_ky: do ik = 1,nky
      ky = (ik-1)*delta_k
      do jy1 = 1,nky
@@ -32,10 +30,8 @@ subroutine buildfullprojectors (p_projector,q_projector, nky,nx)
         enddo
      enddo
   enddo loop_ky
-
   full_p_projector = full_p_projector * one_over_nky
   full_q_projector = full_q_projector * one_over_nky
-
   return
 end subroutine buildfullprojectors
 
