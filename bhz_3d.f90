@@ -3,22 +3,23 @@ program bhz_3d
   USE DMFT_TOOLS
   implicit none
 
-  integer,parameter                       :: L=2048,Norb=2,Nspin=2,Nso=Nspin*Norb
-  integer                                 :: Nk,Nktot,Nkpath,Nkx,Npts,z2(4)
-  integer                                 :: i,j,k,ik,iorb,jorb
-  integer                                 :: ix,iy,iz
-  real(8)                                 :: kx,ky,kz
-  real(8),dimension(:),allocatable        :: kxgrid
-  real(8),dimension(:,:),allocatable      :: kpath,ktrims
-  complex(8),dimension(:,:,:),allocatable :: Hk
-  real(8)                                 :: ez,mh,rh,lambda,delta,lz
-  real(8)                                 :: xmu,beta,eps,Ekin,Eloc
-  real(8),dimension(L)                    :: wm,wr
-  real(8)                                 :: n(Nso)
-  complex(8)                              :: w,Hloc(Nso,Nso)
-  complex(8)                              :: Gmats(Nso,Nso,L),Greal(Nso,Nso,L)
-  character(len=20)                       :: file,nkstring
-  logical                                 :: iexist,ibool,dcflag,iener
+  integer,parameter                             :: L=2048,Norb=2,Nspin=2,Nso=Nspin*Norb
+  integer                                       :: Nk,Nktot,Nkpath,Nkx,Npts,z2(4)
+  integer                                       :: i,j,k,ik,iorb,jorb
+  integer                                       :: ix,iy,iz
+  real(8)                                       :: kx,ky,kz
+  real(8),dimension(:),allocatable              :: kxgrid,Wtk
+  real(8),dimension(:,:),allocatable            :: kpath,ktrims
+  complex(8),dimension(:,:,:),allocatable       :: Hk
+  real(8)                                       :: ez,mh,rh,lambda,delta,lz
+  real(8)                                       :: xmu,beta,eps,Ekin,Eloc
+  real(8),dimension(L)                          :: wm,wr
+  real(8)                                       :: n(Nso)
+  complex(8)                                    :: w,Hloc(Nso,Nso)
+  complex(8)                                    :: Gmats(Nso,Nso,L),Greal(Nso,Nso,L)
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,L) :: xGmats,xGreal,Sigma
+  character(len=20)                             :: file,nkstring
+  logical                                       :: iexist,ibool,dcflag,iener
 
 
   call parse_input_variable(nkx,"NKX","inputBHZ.conf",default=25)
@@ -38,6 +39,7 @@ program bhz_3d
   !SOLVE AND PLOT THE FULLY HOMOGENOUS PROBLEM:
   Nktot=Nkx*Nkx*Nkx
   allocate(Hk(Nso,Nso,Nktot))
+  allocate(Wtk(Nktot))
   allocate(kxgrid(Nkx))
   write(*,*) "Using Nk_total="//txtfy(Nktot)
   Greal = zero
@@ -45,6 +47,7 @@ program bhz_3d
   Hloc  = zero
   kxgrid = kgrid(Nkx)
   Hk = build_hk_model(hk_model,Nso,kxgrid,kxgrid,kxgrid)
+  Wtk = 1d0/Nktot
   call write_hk_w90(trim(file),Nso,&
        Nd=Norb,&
        Np=1,   &
@@ -95,10 +98,9 @@ program bhz_3d
   kpath(7,:)=[0,0,0]!G
   kpath(8,:)=[0,0,1]!Z
   kpath=kpath*pi
-  call solve_Hk_along_BZpath(Hk_model,Nso,kpath,Nkpath,&
-       colors_name=[character(len=20) :: 'red','blue','red','blue'],&
-                                !points_name=[character(len=20) :: "G","X","M","G","R","M","Z","R","G","Z"],&
-       points_name=[character(len=20) :: "X","G","M","R","Z","A","G","Z"],&
+  call TB_solve_path(Hk_model,Nso,kpath,Nkpath,&
+       colors_name=[red1,blue1,red1,blue1],&
+       points_name=[character(len=10) :: "X","G","M","R","Z","A","G","Z"],&
        file="Eigenband.nint")
 
 
@@ -109,6 +111,11 @@ program bhz_3d
 
 
   !Build the local GF:
+  Sigma=zero
+  call add_ctrl_var(beta,"BETA",default=1000.d0)
+  call add_ctrl_var(xmu,"XMU",default=0d0)
+  call dmft_gloc_matsubara(Hk,Wtk,xGmats,Sigma,iprint=1)
+  !
   wm = pi/beta*real(2*arange(1,L)-1,8)
   wr = linspace(-10.d0,10.d0,L)
   call start_timer()

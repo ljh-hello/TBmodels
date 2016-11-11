@@ -169,7 +169,7 @@ program bhz_fcc_stripe
      enddo
   enddo
   call TB_solve_path(bhz_edge_model,Ly,Nso,kpath,Nkpath,&
-       colors_name=[red1,gray88,blue1,gray88,green1,gray88,yellow1,gray88],&
+       colors_name=[red1,gray88,blue1,gray88,blue1,gray88,red1,gray88],&
        points_name=[character(len=10) :: "-pi","0","pi"],&
        file="Ren_Eigenbands.nint",pbc=.false.)
 

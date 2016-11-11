@@ -1,6 +1,6 @@
 ##$ COMPILER: suppprted compilers are ifort, gnu >v4.7
 ##$ use mpif90 for parallel compiler
-FC=ifort
+FC=mpif90
 
 ##$ PLATFORM: supported platform are intel, gnu
 ##$ if using a parallel compiler (mpif90) check
@@ -14,20 +14,8 @@ LIBDIR=/opt
 
 
 ##$ CHOOSE THE MODEL BY SELECTING THE PROGRAM DRIVER
-#EXE=hc_graphene
-#EXE=hc_haldane
-#EXE=stripe_graphene
 
-
-#EXE=bhz_2d
-EXE=bhz_2d_edge
-#EXE=bhz_3d
-#EXE=bhz_afm_2d
-#EXE=bhz_afm_3d
-
-#EXE=tki_3d
-#EXE=tki_2d
-
+EXE=bhz_2d_edge_afm2
 
 
 ##$ SET THE LOCATION OF YOU PROGRAM DRIVER (default is ./drivers)
@@ -59,7 +47,7 @@ endif
 ##$ 
 ##$ ELSE:
 ##$ 
-ARGS=  -ldmftt -lscifor_all
+ARGS=  -ldmftt -lscifor
 
 
 
