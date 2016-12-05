@@ -1,9 +1,9 @@
-program hc_haldane
+program hc_haldaneAF
   USE SCIFOR
   USE DMFT_TOOLS
   implicit none
 
-  integer,parameter                       :: Norb=1,Nspin=1,Nlat=2,Nso=Nspin*Norb,Nlso=Nlat*Nso
+  integer,parameter                       :: Norb=1,Nspin=2,Nlat=2,Nso=Nspin*Norb,Nlso=Nlat*Nso
   integer                                 :: Nk,Nktot,Lfreq,Nkpath
   real(8)                                 :: ts,tsp,phi,delta,xmu,beta,eps,wmax,Mh,Ndens(Nlso)
   integer                                 :: i,j,k,ik,ix,iy,iorb,jorb
@@ -21,7 +21,7 @@ program hc_haldane
   real(8)                                 :: chern,BZ_area,eigval(Nlso)
   real(8),dimension(:,:,:),allocatable    :: nkgrid
   complex(8),dimension(:,:,:),allocatable :: BlochStates
-
+  complex(8),dimension(4,4)               :: GammaX,GammaY,GammaZ,Gamma0
 
   call parse_input_variable(Nk,"NK","inputHALDANE.conf",default=20)
   call parse_input_variable(nkpath,"NKPATH","inputHALDANE.conf",default=100)
@@ -39,6 +39,12 @@ program hc_haldane
 
   Nktot=Nk*Nk
   write(*,"(A)")"Using Nk="//txtfy(Nktot)
+
+  Gamma0 = kron_pauli(pauli_0,pauli_0)
+  GammaX = kron_pauli(pauli_0,pauli_x)
+  GammaY = kron_pauli(pauli_0,pauli_y)
+  GammaZ = kron_pauli(pauli_0,pauli_z)
+
 
   a=1d0
   a0=a*sqrt(3d0)
@@ -83,7 +89,7 @@ program hc_haldane
         kvec = kx*bk1 + ky*bk2
         kxgrid(ix)=kvec(1)
         kygrid(iy)=kvec(2) 
-        Hk(:,:,ik) = hk_haldane_model(kvec,Nlso)
+        Hk(:,:,ik) = hk_haldaneAF_model(kvec,Nlso)
      enddo
   enddo
   Wtk = 1d0/Nktot
@@ -110,7 +116,7 @@ program hc_haldane
   KPath(2,:)=pointK
   Kpath(3,:)=pointKp
   KPath(4,:)=[0d0,0d0]
-  call TB_Solve_path(hk_haldane_model,Nlso,KPath,Nkpath,&
+  call TB_Solve_path(hk_haldaneAF_model,Nlso,KPath,Nkpath,&
        colors_name=[red1,blue1],&
        points_name=[character(len=10) :: "G","K","K`","G"],&
        file="Eigenbands.nint")
@@ -138,45 +144,15 @@ program hc_haldane
   open(10,file="density.nint")
   write(10,"(10F20.12)")(Ndens(iorb),iorb=1,Nlso),sum(Ndens)
   close(10)
-
-
-  !CHERN NUMBERS:
-  allocate(BlochStates(Nlso,Nk,Nk))
-  allocate(Berry_curvature(Nk,Nk))
-  chern=0d0
-  ik=0
-  do ix=1,Nk
-     do iy=1,Nk
-        ik=ik+1
-        Eigvec = Hk(:,:,ik)
-        call eigh(Eigvec,Eigval)
-        BlochStates(:,ix,iy) = Eigvec(:,1)
-     enddo
-  enddo
-
-  ! BZ_area=(4*pi)**2/6/sqrt(3d0)
-  ! chern=-simps2d(chern_nk,[-pi,pi-pi2/Nk],[-pi,pi-pi2/Nk])*BZ_area/pi2/pi2
-  ! print*,chern
-  call get_Chern_number(BlochStates,chern,Berry_curvature,Nk/pi2*Nk/pi2)
-  print*,chern
-  call splot3d("Berry_Curvature.nint",kxgrid,kygrid,Berry_Curvature)
-
-  open(10,file="chern.nint")
-  write(10,*)nint(chern),chern
-  close(10)
-
   write(*,"(A,10F14.9)")"Occupations =",(Ndens(iorb),iorb=1,Nlso),sum(Ndens)
-  write(*,"(A,I)")"Chern num.  =",nint(chern)
 
 
-
-  print*,"Get C with NEW procedure:"
-  call get_Chern_number_NEW(Hk,[Nk,Nk],1,Nk/pi2*Nk/pi2,Chern)
+  call get_Chern_number_NEW(Hk,[Nk,Nk],2,Nk/pi2*Nk/pi2,Chern)
 
 contains
 
 
-  function hk_haldane_model(kpoint,Nlso) result(hk)
+  function hk_haldaneAF_model(kpoint,Nlso) result(hk)
     real(8),dimension(:)          :: kpoint
     integer                       :: Nlso
     complex(8),dimension(Nlso,Nlso) :: hk
@@ -195,55 +171,9 @@ contains
     hx =-ts*sum( cos(kdotd(:)) )
     hy =-ts*sum( sin(kdotd(:)) )
     hz = -2*tsp*sin(phi)*sum( sin(kdota(:)) ) + Mh 
-    hk = h0*pauli_0 + hx*pauli_x + hy*pauli_y + hz*pauli_z
-  end function hk_haldane_model
-
-
-
-  function nd_model(kpoint,M) result(dk)
-    real(8),dimension(:),intent(in) :: kpoint
-    integer                         :: M
-    real(8),dimension(M)            :: dk
-    real(8)                         :: kx,ky,norm
-    real(8)                         :: h0,hx,hy,hz
-    real(8)                         :: kdotd(3),kdota(3)
-    !(k.d_j)
-    kdotd(1) = dot_product(kpoint,d1)
-    kdotd(2) = dot_product(kpoint,d2)
-    kdotd(3) = dot_product(kpoint,d3)
-    !(k.a_j)
-    kdota(1) = dot_product(kpoint,a1)
-    kdota(2) = dot_product(kpoint,a2)
-    kdota(3) = dot_product(kpoint,a3)
-    !
-    h0 = -2*tsp*cos(phi)*sum( cos(kdota(:)) )
-    hx =-ts*sum( cos(kdotd(:)) )
-    hy =-ts*sum( sin(kdotd(:)) )
-    hz = -2*tsp*sin(phi)*sum( sin(kdota(:)) ) + Mh 
-    dk=[hx,hy,hz]
-    norm = dot_product(dk,dk)
-    dk = dk/sqrt(norm)
-    where(abs(dk)<1.d-12)dk=0d0
-  end function nd_model
-
-  function chern_nk(kpoint) result(ck)
-    real(8),dimension(:) :: kpoint
-    real(8)              :: dk(3),dk_(3)
-    real(8)              :: ddk(3,2)
-    real(8)              :: ck,norm
-    dk  = nd_model(kpoint,3)
-    call djac_dk(kpoint,3,ddk)
-    ck  = s3_product(dk,ddk(:,1),ddk(:,2))/4d0/pi
-  end function chern_nk
-
-  subroutine djac_dk(kpoint,M,ddk)
-    real(8),dimension(:)            :: kpoint
-    real(8),dimension(size(kpoint)) :: k_
-    integer                         :: M
-    real(8),dimension(M)            :: fvec,wa1
-    real(8)                         :: ddk(M,size(kpoint))
-    call djacobian(nd_model,kpoint,M,ddk)
-  end subroutine djac_dk
+    !hk = h0*pauli_0 + hx*pauli_x + hy*pauli_y + hz*pauli_z
+    hk = h0*Gamma0 + hx*GammaX + hy*GammaY + hz*GammaZ
+  end function hk_haldaneAF_model
 
 
 
@@ -368,6 +298,7 @@ contains
   end subroutine Get_Chern_number_NEW
 
 
+
   ! calcola il numero di chern di un generico stato dipendente da k con il metodo di Resta
   subroutine Get_Chern_number(State,Chern_number,Berry_curvatures,one_over_area)
     complex(8),intent(in),dimension(:,:,:)                     :: state !(nhilb, nk1, nk2)
@@ -408,4 +339,6 @@ contains
 
 
 
-end program hc_haldane
+
+
+end program hc_haldaneAF

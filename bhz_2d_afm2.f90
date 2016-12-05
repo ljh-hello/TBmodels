@@ -14,10 +14,11 @@ program bhz_afm
   real(8)                                 :: kx,ky,kz
   real(8),dimension(:),allocatable        :: kxgrid
   real(8),dimension(:,:),allocatable      :: kpath,ktrims,ddk
+  real(8),dimension(2)                    :: bk1,bk2,kvec
   complex(8),dimension(:,:,:),allocatable :: Hk
   real(8),dimension(:),allocatable        :: Wtk
   real(8)                                 :: mh,rh,lambda,delta,wmax
-  real(8)                                 :: xmu,beta,eps,Ekin,Eloc
+  real(8)                                 :: xmu,beta,eps,Ekin,Eloc,alen
   real(8),dimension(L)                    :: wm,wr
   real(8)                                 :: n(Nlso)
   complex(8)                              :: w
@@ -52,14 +53,38 @@ program bhz_afm
   Nktot=Nkx*Nkx
   allocate(Hk(Nlso,Nlso,Nktot))
   allocate(Wtk(Nktot))
-  allocate(kxgrid(Nkx))
   write(*,*) "Using Nk_total="//txtfy(Nktot)
 
-  Hloc  = zero
-  kxgrid = kgrid(Nkx)
-  Hk = TB_build_model(hk_model,Nlso,kxgrid,kxgrid,[0d0])
+
+  alen=1d0
+  bk1 = pi/alen*[1,-1]
+  bk2 = 2*pi/alen*[0,1]
+
+  ik=0
+  do iy=1,Nkx
+     ky = dble(iy-1)/Nkx
+     do ix=1,Nkx
+        kx=dble(ix-1)/Nkx
+        ik=ik+1
+        kvec = kx*bk1 + ky*bk2
+        Hk(:,:,ik) = hk_model(kvec,Nlso)
+     enddo
+  enddo
   Wtk = 1d0/Nktot
   Hloc=sum(Hk(:,:,:),dim=3)/Nktot
+
+
+  !solve along the standard path in the 2D BZ.
+  Npts=4
+  allocate(kpath(Npts,3))
+  kpath(1,:)=kpoint_Gamma
+  kpath(2,:)=kpoint_X1
+  kpath(3,:)=kpoint_M1
+  kpath(4,:)=kpoint_Gamma
+  call solve_Hk_along_BZpath(Hk_model,Nlso,kpath,Nkpath,&
+       colors_name=[red1,blue1,red1,blue1,red1,blue1,red1,blue1],&
+       points_name=[character(len=20) :: 'G', 'X', 'M', 'G'],&
+       file="Eigenbands_afm.nint")
 
 
   !Build the local GF:
@@ -84,18 +109,6 @@ program bhz_afm
   write(*,"(A,20F14.9)")"Occupations =",(n(iorb),iorb=1,Nlso),sum(n)
 
 
-
-  !solve along the standard path in the 2D BZ.
-  Npts=4
-  allocate(kpath(Npts,3))
-  kpath(1,:)=kpoint_Gamma
-  kpath(2,:)=kpoint_X1
-  kpath(3,:)=kpoint_M1
-  kpath(4,:)=kpoint_Gamma
-  call solve_Hk_along_BZpath(Hk_model,Nlso,kpath,Nkpath,&
-       colors_name=[red1,blue1,red1,blue1, red1,blue1,red1,blue1],&
-       points_name=[character(len=20) :: 'G', 'X', 'M', 'G'],&
-       file="Eigenbands_afm.nint")
 
 
 

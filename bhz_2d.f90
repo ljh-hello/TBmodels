@@ -19,16 +19,17 @@
 ! hso^{2x2}(k):=
 ! | xi*rh*(sin(kx)-xi*sin(ky))  &         \delta              |
 ! |         -\delta             &             0               |
-program bhz_fcc
+!
+program bhz_2d
   USE SCIFOR
   USE DMFT_TOOLS
   implicit none
 
-  integer,parameter                       :: L=1024,Norb=2,Nspin=2,Nso=Nspin*Norb
+  integer,parameter                       :: Norb=2,Nspin=2,Nso=Nspin*Norb
   integer                                 :: Nk,Nktot,Nkpath,Nkx,Npts
   integer                                 :: i,j,k,ik,iorb,jorb
   integer                                 :: ix,iy,iz
-  real(8)                                 :: kx,ky,kz,kvec(2)
+  real(8)                                 :: kx,ky,kz
   real(8),dimension(:),allocatable        :: kxgrid
   real(8),dimension(:,:),allocatable      :: kpath,ktrims,ddk,berry_curvature
   complex(8),dimension(:,:,:),allocatable :: Hk
@@ -37,30 +38,38 @@ program bhz_fcc
   real(8)                                 :: chern,z2
   real(8),dimension(:,:,:),allocatable    :: nkgrid
   real(8)                                 :: mh,rh,lambda,delta
-  real(8)                                 :: xmu,beta,eps,Ekin,Eloc
-  real(8),dimension(L)                    :: wm,wr
-  real(8)                                 :: n(Nso),eigval(Norb)
-  complex(8)                              :: w,Hloc(Nso,Nso),Eigvec(Norb,Norb)
-  complex(8)                              :: Gmats(Nso,Nso,L),Greal(Nso,Nso,L)
+  real(8)                                 :: xmu,beta,eps,Eloc(2)
+  real(8)                                 :: dens(Nso),eigval(Norb)
+  complex(8)                              :: Hloc(Nso,Nso),Eigvec(Norb,Norb)
+  complex(8),dimension(:,:,:),allocatable :: Gmats,Greal,Sfoo !(Nso,Nso,L)
   character(len=20)                       :: file,nkstring
-  logical                                 :: iexist,ibool,iener
-
+  logical                                 :: iexist,ibool
+  complex(8),dimension(Nso,Nso)             :: Gamma1,Gamma2,Gamma5
 
   call parse_input_variable(nkx,"NKX","inputBHZ.conf",default=25)
   call parse_input_variable(nkpath,"NKPATH","inputBHZ.conf",default=500)
-  call parse_input_variable(mh,"MH","inputBHZ.conf",default=3.d0)
-  call parse_input_variable(rh,"RH","inputBHZ.conf",default=0.d0)
+  call parse_input_variable(L,"L","inputBHZ.conf",default=2048)
+  call parse_input_variable(mh,"MH","inputBHZ.conf",default=1d0)
+  call parse_input_variable(rh,"RH","inputBHZ.conf",default=0d0)
   call parse_input_variable(lambda,"LAMBDA","inputBHZ.conf",default=0.3d0)
-  call parse_input_variable(delta,"DELTA","inputBHZ.conf",default=0.d0)
+  call parse_input_variable(delta,"DELTA","inputBHZ.conf",default=0d0)
   call parse_input_variable(xmu,"XMU","inputBHZ.conf",default=0.d0)
   call parse_input_variable(eps,"EPS","inputBHZ.conf",default=4.d-2)
   call parse_input_variable(beta,"BETA","inputBHZ.conf",default=1000.d0)
-  call parse_input_variable(iener,"IENER","inputBHZ.conf",default=.false.)
-  call parse_input_variable(kvec,"kvec","inputBHZ.conf",default=[0d0,0d0])
   call parse_input_variable(file,"FILE","inputBHZ.conf",default="hkfile_bhz.in")
   call save_input_file("inputBHZ.conf")
+  call add_ctrl_var(beta,"BETA")
+  call add_ctrl_var(xmu,"xmu")
+  call add_ctrl_var(-wmax,"wini")
+  call add_ctrl_var(wmax,"wfin")
+  call add_ctrl_var(eps,"eps")
 
 
+
+  !SETUP THE GAMMA MATRICES:
+  gamma1=kron_pauli( pauli_tau_z, pauli_sigma_x)
+  gamma2=kron_pauli( pauli_tau_0,-pauli_sigma_y)
+  gamma5=kron_pauli( pauli_tau_0, pauli_sigma_z)
 
 
 
@@ -70,8 +79,7 @@ program bhz_fcc
   allocate(kxgrid(Nkx))
   write(*,*) "Using Nk_total="//txtfy(Nktot)
 
-  Greal = zero
-  Gmats = zero 
+
   Hloc  = zero
   kxgrid = kgrid(Nkx)
   Hk = TB_build_model(hk_model,Nso,kxgrid,kxgrid,[0d0])
@@ -131,8 +139,8 @@ program bhz_fcc
   close(100)
 
   !Build the local GF:
-  wm = pi/beta*real(2*arange(1,L)-1,8)
-  wr = linspace(-10.d0,10.d0,L)
+  Greal = zero
+  Gmats = zero 
   do ik=1,Nktot
      do i=1,L
         w = dcmplx(wr(i),eps)+xmu
@@ -560,6 +568,6 @@ contains
   end subroutine get_chern_number
 
 
-end program bhz_fcc
+end program bhz_2d
 
 

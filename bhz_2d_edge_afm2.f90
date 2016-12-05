@@ -12,10 +12,11 @@ program bhz_fcc_stripe
   real(8)                                       :: kx,ky,kz
   real(8),dimension(:),allocatable              :: kxgrid
   real(8),dimension(:,:),allocatable            :: kpath
+  real(8),dimension(2)                          :: bk1,bk2,kvec
   complex(8),dimension(:,:,:),allocatable       :: Hkr
   real(8),dimension(:),allocatable              :: Wtk
   complex(8),dimension(Nso,Nso)                 :: Gamma1,Gamma2,Gamma5
-
+  type(rgb_color),dimension(:,:),allocatable    :: colors
   real(8)                                       :: mh,lambda,e0
   real(8)                                       :: xmu,beta,eps,wmax
   real(8),dimension(:,:,:),allocatable          :: dens
@@ -25,7 +26,7 @@ program bhz_fcc_stripe
   character(len=20)                             :: file
   logical                                       :: nogf
 
-  call parse_input_variable(nk,"NK","inputBHZ.conf",default=100)
+  call parse_input_variable(nk,"NK","inputBHZ.conf",default=25)
   call parse_input_variable(Ly,"Ly","inputBHZ.conf",default=11)
   call parse_input_variable(nkpath,"NKPATH","inputBHZ.conf",default=500)
   call parse_input_variable(e0,"e0","inputBHZ.conf",default=1d0)
@@ -47,12 +48,21 @@ program bhz_fcc_stripe
   gamma2=kron_pauli( pauli_tau_0,-pauli_sigma_y)
   gamma5=kron_pauli( pauli_tau_0, pauli_sigma_z)
 
+  bk1 = pi*[1,-1]
+  bk2 = 2*pi*[0,1]
+
+
   print*,"Build H(k,R) model"
   allocate(Kxgrid(Nk))
   allocate(Hkr(Ncell*Ly*Nso,Ncell*Ly*Nso,Nk))
   allocate(Wtk(Nk))
-  kxgrid = kgrid(Nk)
-  Hkr = TB_build_model(bhz_afm2_edge_model,Ly,Ncell*Nso,kxgrid,[0d0],[0d0],pbc=.false.)
+  ! kxgrid = kgrid(Nk)
+  ! Hkr = TB_build_model(bhz_afm2_edge_model,Ly,Ncell*Nso,kxgrid,[0d0],[0d0],pbc=.false.)
+  do ix=1,Nk
+     kx=dble(ix-1)/Nk
+     kvec = kx*bk1
+     Hkr(:,:,ix) = bhz_afm2_edge_model(kvec,Ly,Ncell*Nso,.false.)
+  enddo
   Wtk = 1d0/Nk
 
 
@@ -64,8 +74,12 @@ program bhz_fcc_stripe
   kpath(1,:)=[-1]*pi
   kpath(2,:)=[ 0]*pi
   kpath(3,:)=[ 1]*pi
+  allocate(colors(Ly,Ncell*Nso))
+  colors = gray88
+  colors(1,:) = [red1,gray88,blue1,gray88,red1,gray88,blue1,gray88]
+  colors(Ly,:) =[blue1,gray88,red1,gray88,blue1,gray88,red1,gray88]
   call TB_solve_path(bhz_afm2_edge_model,Ly,Ncell*Nso,kpath,Nkpath,&
-       colors_name=[gray88,gray88,gray88,gray88,gray88,gray88,gray88,gray88],&
+       colors_name=colors,& 
        points_name=[character(len=10) :: "-pi","0","pi"],&
        file="Eigenbands_afm.nint",pbc=.false.)
 

@@ -90,13 +90,17 @@ program grapheneAF
 
   print*,sum(Hk,3)/dble(Nktot)
 
-  call write_hk_w90("Hkrfile_grapheneAF.data",&
-       No=Nso,&
-       Nd=Norb,&
-       Np=0,&
-       Nineq=1,&
-       Hk=Hk,&
-       kxgrid=kxgrid,kygrid=kygrid,kzgrid=[0d0])
+  !THIS IS WRONG BECUASE THE GRIDS KXGRID,KYGRID
+  !CAN ONLY BE DESCRIBED AS VECTORS GRID (i.e.
+  ! you can not store the information with a single 
+  ! real number) 
+  ! call write_hk_w90("Hkrfile_grapheneAF.data",&
+  !      No=Nso,&
+  !      Nd=Norb,&
+  !      Np=0,&
+  !      Nineq=1,&
+  !      Hk=Hk,&
+  !      kxgrid=kxgrid,kygrid=kygrid,kzgrid=[0d0])
 
 
   Eshift=xmu
