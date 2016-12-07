@@ -26,25 +26,23 @@ program bhz_2d
   implicit none
 
   integer,parameter                       :: Norb=2,Nspin=2,Nso=Nspin*Norb
-  integer                                 :: Nk,Nktot,Nkpath,Nkx,Npts
+  integer                                 :: Nk,Nktot,Nkpath,Nkx,Npts,L
   integer                                 :: i,j,k,ik,iorb,jorb
   integer                                 :: ix,iy,iz
   real(8)                                 :: kx,ky,kz
-  real(8),dimension(:),allocatable        :: kxgrid
-  real(8),dimension(:,:),allocatable      :: kpath,ktrims,ddk,berry_curvature
+  real(8),dimension(:,:),allocatable      :: kgrid,kpath,ktrims
   complex(8),dimension(:,:,:),allocatable :: Hk
-  complex(8),dimension(:,:,:),allocatable :: State
+  real(8),dimension(:),allocatable        :: Wtk
 
   real(8)                                 :: chern,z2
-  real(8),dimension(:,:,:),allocatable    :: nkgrid
   real(8)                                 :: mh,rh,lambda,delta
-  real(8)                                 :: xmu,beta,eps,Eloc(2)
-  real(8)                                 :: dens(Nso),eigval(Norb)
-  complex(8)                              :: Hloc(Nso,Nso),Eigvec(Norb,Norb)
+  real(8)                                 :: xmu,beta,eps,Eout(2)
+  real(8)                                 :: dens(Nso)
+  complex(8)                              :: Hloc(Nso,Nso)
   complex(8),dimension(:,:,:),allocatable :: Gmats,Greal,Sfoo !(Nso,Nso,L)
-  character(len=20)                       :: file,nkstring
-  logical                                 :: iexist,ibool
-  complex(8),dimension(Nso,Nso)             :: Gamma1,Gamma2,Gamma5
+  character(len=20)                       :: file
+  logical                                 :: iexist
+  complex(8),dimension(Nso,Nso)           :: Gamma1,Gamma2,Gamma5
 
   call parse_input_variable(nkx,"NKX","inputBHZ.conf",default=25)
   call parse_input_variable(nkpath,"NKPATH","inputBHZ.conf",default=500)
@@ -59,9 +57,11 @@ program bhz_2d
   call parse_input_variable(file,"FILE","inputBHZ.conf",default="hkfile_bhz.in")
   call save_input_file("inputBHZ.conf")
   call add_ctrl_var(beta,"BETA")
+  call add_ctrl_var(Norb,"NORB")
+  call add_ctrl_var(Nspin,"Nspin")
   call add_ctrl_var(xmu,"xmu")
-  call add_ctrl_var(-wmax,"wini")
-  call add_ctrl_var(wmax,"wfin")
+  call add_ctrl_var(-10d0,"wini")
+  call add_ctrl_var(10d0,"wfin")
   call add_ctrl_var(eps,"eps")
 
 
@@ -72,94 +72,28 @@ program bhz_2d
   gamma5=kron_pauli( pauli_tau_0, pauli_sigma_z)
 
 
-
   !SOLVE AND PLOT THE FULLY HOMOGENOUS PROBLEM:
   Nktot=Nkx*Nkx
-  allocate(Hk(Nso,Nso,Nktot))
-  allocate(kxgrid(Nkx))
   write(*,*) "Using Nk_total="//txtfy(Nktot)
+  allocate(Hk(Nso,Nso,Nktot))
+  allocate(Wtk(Nktot))
+  call TB_set_bk([pi2,0d0],[0d0,pi2])
+
+  call TB_build_model(Hk,hk_model,Nso,[Nkx,Nkx])
+  Wtk = 1d0/Nktot
+
+  call TB_write_hk(Hk,trim(file),Nso,&
+       Nd=Norb,Np=1,Nineq=1,&
+       Nkvec=[Nkx,Nkx])
 
 
-  Hloc  = zero
-  kxgrid = kgrid(Nkx)
-  Hk = TB_build_model(hk_model,Nso,kxgrid,kxgrid,[0d0])
-
-  call write_hk_w90(trim(file),Nso,&
-       Nd=Norb,&
-       Np=1,   &
-       Nineq=1,&
-       hk=Hk,  &
-       kxgrid=kxgrid,&
-       kygrid=kxgrid,&
-       kzgrid=[0d0])
-  Hloc=sum(Hk(:,:,:),dim=3)/Nktot
-  call write_Hloc(Hloc)
-
-  allocate(state(Norb,Nkx,Nkx))
-  allocate(nkgrid(Nkx,Nkx,3))
-  allocate(Berry_curvature(Nkx,Nkx))
-  chern=0d0
-  ik=0
-  do i=1,Nkx
-     kx = kxgrid(i)
-     do j=1,Nkx
-        ky = kxgrid(j)
-        ik=ik+1
-        chern = chern - chern_nk([kx,ky])/4d0/pi
-        nkgrid(i,j,:) = nd_model([kx,ky],3)
-
-        Eigvec = Hk(1:Norb,1:Norb,ik)
-        call eigh(Eigvec,Eigval)
-        state(:,i,j) = Eigvec(:,1)
-
-        write(100,"(6F18.12)")&
-             nkgrid(i,j,1)-1d-3,nkgrid(i,j,2)-1d-3,nkgrid(i,j,3)-1d-3,&
-             nkgrid(i,j,1)+1d-3,nkgrid(i,j,2)+1d-3,nkgrid(i,j,3)+1d-3
-        write(200,"(3F18.12)")&
-             nkgrid(i,j,1),nkgrid(i,j,2),nkgrid(i,j,3)
-        write(300,"(6F18.12)")&
-             kx,ky,0d0, &
-             nkgrid(i,j,1),nkgrid(i,j,2),nkgrid(i,j,3)
-     enddo
-  enddo
-  print*,chern*(2*pi/Nkx)*(2*pi/Nkx)  
-  chern=-simps2d(chern_nk,[-pi,pi],[-pi,pi],N0=200,iterative=.false.)
-  print*,chern/4d0/pi
-
-  call Get_Chern_number(state,chern,Berry_curvature,Nkx/pi2*Nkx/pi2)
-  print*,chern
-  call splot3d("Berry_Curvature.nint",kxgrid,kxgrid,Berry_Curvature)
+  !GET LOCAL PART OF THE HAMILTONIAN
+  Hloc=sum(Hk,dim=3)/Nktot
+  where(abs(Hloc)<1d-6)Hloc=zero
+  call TB_write_Hloc(Hloc)
 
 
-  allocate(ktrims(2,4))
-  ktrims=reshape( [ [0d0,0d0] , [0d0,pi] , [pi,0d0] , [pi,pi] ] , shape(ktrims))
-  z2 = z2_number(ktrims,[2,4])
-  open(100,file="z2_invariant.nint")
-  write(100,*) z2
-  close(100)
-
-  !Build the local GF:
-  Greal = zero
-  Gmats = zero 
-  do ik=1,Nktot
-     do i=1,L
-        w = dcmplx(wr(i),eps)+xmu
-        Greal(:,:,i)=Greal(:,:,i) + inverse_g0k(w,Hk(:,:,ik))/Nktot
-        w = xi*wm(i)+xmu
-        Gmats(:,:,i)=Gmats(:,:,i) + inverse_g0k(w,Hk(:,:,ik))/Nktot
-     enddo
-  enddo
-  do iorb=1,Nso
-     call splot("Gloc_l"//reg(txtfy(iorb))//"m"//reg(txtfy(iorb))//"_iw.nint",wm,Gmats(iorb,iorb,:))
-     call splot("Gloc_l"//reg(txtfy(iorb))//"m"//reg(txtfy(iorb))//"_realw.nint",wr,&
-          -dimag(Greal(iorb,iorb,:))/pi,dreal(Greal(iorb,iorb,:)))
-     n(iorb) = fft_get_density(Gmats(iorb,iorb,:),beta)
-  enddo
-
-
-  call get_shcond()
-
-  !solve along the standard path in the 2D BZ.
+  !SOLVE ALONG A PATH IN THE BZ.
   Npts=5
   allocate(kpath(Npts,3))
   kpath(1,:)=kpoint_X1
@@ -167,29 +101,60 @@ program bhz_2d
   kpath(3,:)=kpoint_M1
   kpath(4,:)=kpoint_X1
   kpath(5,:)=kpoint_Gamma
-  call TB_Solve_path(Hk_model,Nso,kpath,Nkpath,&
-       colors_name=[red1,blue1],&
+  call TB_Solve_model(Hk_model,Nso,kpath,Nkpath,&
+       colors_name=[red1,blue1,red1,blue1],&
        points_name=[character(len=20) :: 'X', 'G', 'M', 'X', 'G'],&
        file="Eigenband.nint")
 
 
+
+
+  !Build the local GF:
+  allocate(Gmats(Nso,Nso,L))
+  allocate(Greal(Nso,Nso,L))
+  allocate(Sfoo(Nso,Nso,L))
+  Gmats=zero
+  Greal=zero
+  Sfoo =zero
+  call dmft_gloc_matsubara(Hk,Wtk,Gmats,Sfoo,iprint=1)
+  Sfoo =zero
+  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sfoo,iprint=1)
+  do iorb=1,Nso
+     dens(iorb) = fft_get_density(Gmats(iorb,iorb,:),beta)
+  enddo
   !plot observables
   open(10,file="observables.nint")
-  write(10,"(10F20.12)")(n(iorb),iorb=1,Nso),sum(n)
+  write(10,"(20F20.12)")(dens(iorb),iorb=1,Nso),sum(dens)
   close(10)
-  write(*,"(A,10F14.9)")"Occupations =",(n(iorb),iorb=1,Nso),sum(n)
+  write(*,"(A,20F14.9)")"Occupations =",(dens(iorb),iorb=1,Nso),sum(dens)
 
-  if(iener)then
-     Ekin=get_kinetic_energy(Hk,L)
-     Eloc=get_local_energy(Hk,L)
+  Sfoo = zero
+  Eout = dmft_kinetic_energy(Hk,Wtk,Sfoo)
+  print*,Eout
 
-     open(10,file="energy.nint")
-     write(10,"(3F20.12)")Ekin,Eloc,Ekin-Eloc
-     close(10)
-     write(*,"(A,F14.9)")"<K>           =",Ekin
-     write(*,"(A,F14.9)")"<E0>          =",Eloc
-  endif
-  deallocate(Kpath,kxgrid,Hk)
+  !GET Z2 INVARIANT:
+  allocate(ktrims(2,4))
+  ktrims=reshape( [ [0d0,0d0] , [0d0,pi] , [pi,0d0] , [pi,pi] ] , shape(ktrims))
+  call get_z2_number(ktrims,[2,4],z2)
+  print*,z2
+
+
+  allocate(kgrid(Nktot,2))
+  kgrid = TB_build_kgrid([Nkx,Nkx])
+  z2 = 0d0
+  do ik=1,Nktot
+     z2 = z2 - chern_nk(kgrid(ik,:))/4d0/pi
+  enddo
+  print*,z2*(2*pi/Nkx)*(2*pi/Nkx)  
+  z2=-simps2d(chern_nk,[-pi,pi],[-pi,pi],N0=200,iterative=.false.)
+  print*,z2/4d0/pi
+
+
+  call get_Chern_Number(Hk,[Nkx,Nkx],2,Nkx/pi2*Nkx/pi2,z2)
+  print*,z2
+
+  ! call get_shcond()
+
 
 
 contains
@@ -200,227 +165,36 @@ contains
   function hk_model(kpoint,N) result(hk)
     real(8),dimension(:)      :: kpoint
     integer                   :: N
+    real(8) :: ek
     real(8)                   :: kx,ky
     complex(8),dimension(N,N) :: hk
     if(N/=4)stop "hk_model: error in N dimensions"
     kx=kpoint(1)
     ky=kpoint(2)
-    Hk          = zero
-    Hk(1:2,1:2) = hk_bhz2x2(kx,ky)
-    Hk(3:4,3:4) = conjg(hk_bhz2x2(-kx,-ky))
-    Hk(1,4) = -delta ; Hk(4,1)=-delta
-    Hk(2,3) =  delta ; Hk(3,2)= delta
-    Hk(1,3) = xi*rh*(sin(kx)-xi*sin(ky))
-    Hk(3,1) =-xi*rh*(sin(kx)+xi*sin(ky))
+    ek = -1d0*(cos(kx)+cos(ky))
+    Hk = (Mh+ek)*Gamma5 + lambda*sin(kx)*Gamma1 + lambda*sin(ky)*Gamma2
+    ! Hk(1,4) = -delta ; Hk(4,1)=-delta
+    ! Hk(2,3) =  delta ; Hk(3,2)= delta
+    ! Hk(1,3) = xi*rh*(sin(kx)-xi*sin(ky))
+    ! Hk(3,1) =-xi*rh*(sin(kx)+xi*sin(ky))
   end function hk_model
-  function hk_bhz2x2(kx,ky) result(hk)
-    real(8)                   :: kx,ky
-    complex(8),dimension(2,2) :: hk
-    hk = (mh-cos(kx)-cos(ky))*pauli_tau_z + lambda*sin(kx)*pauli_tau_x + lambda*sin(ky)*pauli_tau_y 
-  end function hk_bhz2x2
-
-
-
-  function vkx_model(kpoint,N) result(vkx)
-    real(8),dimension(:)      :: kpoint
-    real(8)                   :: kx
-    complex(8),dimension(N,N) :: vkx
-    integer                   :: N
-    kx=kpoint(1)
-    vkx = zero
-    vkx(1:2,1:2) = sin(kx)*pauli_tau_z + lambda*cos(kx)*pauli_tau_x
-    vkx(3:4,3:4) = conjg(sin(-kx)*pauli_tau_z + lambda*cos(-kx)*pauli_tau_x) 
-  end function vkx_model
-
-  function vky_model(kpoint,N) result(vky)
-    real(8),dimension(:)      :: kpoint
-    real(8)                   :: ky
-    complex(8),dimension(N,N) :: vky
-    integer                   :: N
-    ky=kpoint(2)
-    vky = zero
-    vky(1:2,1:2) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
-    vky(3:4,3:4) = conjg(sin(-ky)*pauli_tau_z + lambda*cos(-ky)*pauli_tau_y) 
-  end function vky_model
-
-
-  function inverse_g0k(iw,hk) result(g0k)
-    complex(8)                  :: iw
-    complex(8),dimension(4,4)   :: hk
-    complex(8),dimension(4,4)   :: g0k
-    g0k=zero
-    if(rh==0.AND.delta==0)then
-       g0k(1:2,1:2) = inverse_g0k2x2(iw,hk(1:2,1:2))
-       g0k(3:4,3:4) = inverse_g0k2x2(iw,hk(3:4,3:4))
-    else
-       g0k = (iw + xmu)*zeye(4)-hk
-       call inv(g0k)
-    endif
-  end function inverse_g0k
-  !
-  function inverse_g0k2x2(iw,hk) result(g0k)
-    integer                     :: i
-    complex(8),dimension(2,2)   :: hk
-    complex(8)                  :: iw
-    complex(8),dimension(2,2)   :: g0k
-    complex(8)                  :: delta,ppi,vmix
-    g0k=zero
-    delta = iw - hk(1,1)
-    ppi   = iw - hk(2,2)
-    vmix  =    -hk(1,2)
-    g0k(1,1) = one/(delta - abs(vmix)**2/ppi)
-    g0k(2,2) = one/(ppi - abs(vmix)**2/delta)
-    g0k(1,2) = -vmix/(ppi*delta - abs(vmix)**2)
-    g0k(2,1) = conjg(g0k(1,2))
-  end function inverse_g0k2x2
-
-
-
-  function get_kinetic_energy(Hk,Liw) result(ed_Ekin)
-    integer                                  :: Lk,No,Liw
-    integer                                  :: i,ik,iorb
-    complex(8),dimension(:,:,:)              :: Hk ![Nso][Nso][Nk]
-    real(8),dimension(size(Hk,3))            :: Wtk
-    !
-    real(8),dimension(:),allocatable         :: wm
-    complex(8),dimension(:,:),allocatable    :: Ak,Bk
-    complex(8),dimension(:,:),allocatable    :: Ck,Zk
-    complex(8),dimension(:,:),allocatable    :: Zeta,Gk,Tk
-    real(8)                                  :: Tail0,Tail1,spin_degeneracy
-    !
-    real(8)                                  :: H0,ed_Ekin
-    !
-    No = size(Hk,1)
-    Lk = size(Hk,3)
-    if(No/=size(Hk,2))stop "get_kinetic_energy: size(Hk,1)!=size(Hk,2) [Norb_total]"
-    if(Lk/=size(Wtk))stop "get_kinetic_energy: size(Wtk)!=size(Hk,3) [L_k]"
-    !
-    allocate(wm(Liw))
-    allocate(Ak(No,No),Bk(No,No),Ck(No,No),Zk(No,No),Zeta(No,No),Gk(No,No),Tk(No,No))
-    !
-    wm = pi/beta*dble(2*arange(1,Liw)-1)
-    Wtk=1d0/Lk
-    !
-    H0=0d0
-    Zk=0d0 ; forall(i=1:No)Zk(i,i)=1d0
-    do ik=1,Lk
-       Bk=-Hk(:,:,ik)
-       do i=1,Liw
-          Gk = (xi*wm(i)+xmu)*Zk(:,:) - Hk(:,:,ik)
-          select case(No)
-          case default
-             call matrix_inverse(Gk)
-          case(1)
-             Gk = 1d0/Gk
-          end select
-          Tk = Zk(:,:)/(xi*wm(i)) - Bk(:,:)/(xi*wm(i))**2
-          Ck = matmul(Hk(:,:,ik),Gk - Tk)
-          H0 = H0 + Wtk(ik)*trace_matrix(Ck,No)
-       enddo
-    enddo
-    spin_degeneracy=3.d0-Nspin !2 if Nspin=1, 1 if Nspin=2
-    H0=H0/beta*2.d0*spin_degeneracy
-    !
-    Tail0=0d0
-    Tail1=0d0
-    do ik=1,Lk
-       Ak= Hk(:,:,ik)
-       Bk=-Hk(:,:,ik)
-       Ck= matmul(Ak,Bk)
-       Tail0 = Tail0 + 0.5d0*Wtk(ik)*trace_matrix(Ak,No)
-       Tail1 = Tail1 + 0.25d0*Wtk(ik)*trace_matrix(Ck,No)
-    enddo
-    Tail0=spin_degeneracy*Tail0
-    Tail1=spin_degeneracy*Tail1*beta
-    ed_Ekin=H0+Tail0+Tail1
-    deallocate(wm,Ak,Bk,Ck,Zk,Zeta,Gk,Tk)
-  end function get_kinetic_energy
-
-
-  function get_local_energy(Hk,Liw) result(ed_Eloc)
-    integer                                  :: Lk,No,Liw
-    integer                                  :: i,ik,iorb
-    complex(8),dimension(:,:,:)              :: Hk ![Nso][Nso][Nk]
-    real(8),dimension(size(Hk,3))            :: Wtk
-    !
-    real(8),dimension(:),allocatable         :: wm
-    complex(8),dimension(:,:),allocatable    :: Ak,Bk,Hloc
-    complex(8),dimension(:,:),allocatable    :: Ck,Zk
-    complex(8),dimension(:,:),allocatable    :: Zeta,Gk,Tk
-    real(8)                                  :: Tail0,Tail1,spin_degeneracy
-    !
-    real(8)                                  :: H0,ed_Eloc
-    !
-    No = size(Hk,1)
-    Lk = size(Hk,3)
-    if(No/=size(Hk,2))stop "get_kinetic_energy: size(Hk,1)!=size(Hk,2) [Norb_total]"
-    if(Lk/=size(Wtk))stop "get_kinetic_energy: size(Wtk)!=size(Hk,3) [L_k]"
-    !
-    allocate(wm(Liw))
-    allocate(Ak(No,No),Bk(No,No),Ck(No,No),Zk(No,No),Zeta(No,No),Gk(No,No),Tk(No,No),Hloc(No,No))
-    !
-    wm = pi/beta*dble(2*arange(1,Liw)-1)
-    Wtk=1d0/Lk
-    !
-    Hloc=sum(Hk,3)/Lk
-    H0=0d0
-    Zk=0d0 ; forall(i=1:No)Zk(i,i)=1d0
-    do ik=1,Lk
-       Bk=-Hk(:,:,ik)
-       do i=1,Liw
-          Gk = (xi*wm(i)+xmu)*Zk(:,:) - Hk(:,:,ik)
-          select case(No)
-          case default
-             call matrix_inverse(Gk)
-          case(1)
-             Gk = 1d0/Gk
-          end select
-          Tk = Zk(:,:)/(xi*wm(i)) - Bk(:,:)/(xi*wm(i))**2
-          Ck = matmul(Hloc,Gk - Tk)
-          H0 = H0 + Wtk(ik)*trace_matrix(Ck,No)
-       enddo
-    enddo
-    spin_degeneracy=3.d0-Nspin !2 if Nspin=1, 1 if Nspin=2
-    H0=H0/beta*2.d0*spin_degeneracy
-    !
-    Tail0=0d0
-    Tail1=0d0
-    do ik=1,Lk
-       Ak= Hloc
-       Bk=-Hk(:,:,ik)
-       Ck= matmul(Ak,Bk)
-       Tail0 = Tail0 + 0.5d0*Wtk(ik)*trace_matrix(Ak,No)
-       Tail1 = Tail1 + 0.25d0*Wtk(ik)*trace_matrix(Ck,No)
-    enddo
-    Tail0=spin_degeneracy*Tail0
-    Tail1=spin_degeneracy*Tail1*beta
-    ed_Eloc=H0+Tail0+Tail1
-    deallocate(wm,Ak,Bk,Ck,Zk,Zeta,Gk,Tk,Hloc)
-  end function get_local_energy
-
-
-  function trace_matrix(M,dim) result(tr)
-    integer                       :: dim
-    complex(8),dimension(dim,dim) :: M
-    complex(8) :: tr
-    integer                       :: i
-    tr=dcmplx(0d0,0d0)
-    do i=1,dim
-       tr=tr+M(i,i)
-    enddo
-  end function trace_matrix
 
 
 
 
-  function z2_number(ktrims,band_indices) result(z2)
+
+
+
+
+
+  subroutine get_z2_number(ktrims,band_indices,z2)
     real(8),dimension(:,:),intent(in)       :: ktrims
     integer,dimension(:),intent(in)         :: band_indices
     complex(8),dimension(:,:,:),allocatable :: Htrims
     real(8),dimension(:,:),allocatable      :: Etrims
     complex(8),dimension(:),allocatable     :: Delta
     real(8)                                 :: z2
-    integer                                 :: i,j,Ntrim,itrim,Nocc
+    integer                                 :: i,j,Ntrim,itrim,Nocc,unit
     !
     Ntrim=size(Ktrims,2)
     Nocc = size(band_indices)
@@ -437,8 +211,10 @@ contains
     else
        z2=1d0
     end if
-  end function z2_number
-
+    open(free_unit(unit),file="z2_invariant.dat")
+    write(unit,*) z2
+    close(unit)
+  end subroutine get_z2_number
 
 
   function nd_model(kpoint,M) result(dk)
@@ -475,98 +251,344 @@ contains
   end function chern_nk
 
 
-  subroutine get_shcond()
-    real(8),dimension(L)                :: wm,vm
-    complex(8),dimension(2,2)           :: g0k,KerU,KerD
-    complex(8),dimension(2,2,2,Nktot,L) :: Gk
-    complex(8),dimension(L)             :: Kmats
-    complex(8),dimension(2,2,2,Nktot)   :: Vkx,Vky
-    complex(8)                          :: Ksum
-    real(8)                             :: kx,ky,C_qsh
-    integer                             :: iw,iv,ik,i,j
-    wm = pi/beta*real(2*arange(1,L)-1,8)
-    vm = pi/beta*real(2*arange(1,L)-2,8)
-    Kmats=zero
-    ik=0
-    do i=1,Nkx
-       kx = kxgrid(i)
-       do j=1,Nkx
-          ky = kxgrid(j)
-          ik=ik+1
-          Vkx(1,:,:,ik) = sin(kx)*pauli_tau_z + lambda*cos(kx)*pauli_tau_x
-          Vky(1,:,:,ik) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
-          Vkx(2,:,:,ik) = sin(kx)*pauli_tau_z - lambda*cos(kx)*pauli_tau_x
-          Vky(2,:,:,ik) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
-          do iw=1,L
-             g0k = (xi*wm(iw)+xmu)*eye(2)-hk_bhz2x2(kx,ky)
-             call inv(g0k)
-             Gk(1,:,:,ik,iw) = g0k
-             g0k = (xi*wm(iw)+xmu)*eye(2)-conjg(hk_bhz2x2(-kx,-ky))
-             call inv(g0k)
-             Gk(2,:,:,ik,iw) = g0k
-          enddo
-       enddo
-    enddo
-    call start_timer
-    do iv=1,L
-       Ksum=zero
-       do iw=1,L-iv+1
-          do ik=1,Nktot
-             KerU = matmul( Vky(1,:,:,ik) , Gk(1,:,:,ik,iw+iv-1) )
-             KerU = matmul( KerU          , Vkx(1,:,:,ik)      )
-             KerU = matmul( KerU          , Gk(1,:,:,ik,iw)    )
-             KerD = matmul( Vky(2,:,:,ik) , Gk(2,:,:,ik,iw+iv-1) )
-             KerD = matmul( KerD          , Vkx(2,:,:,ik)      )
-             KerD = matmul( KerD          , Gk(2,:,:,ik,iw)    )
-             Ksum = Ksum + trace_matrix(KerU,2)-trace_matrix(KerD,2)
-          enddo
-       enddo
-       Kmats(iv) = -Ksum/beta*2*pi/Nktot
-       call eta(iv,L)
-    enddo
-    call stop_timer
-    C_qsh = dreal(Kmats(2))/vm(2)
-    open(100,file="qsh_conductance.nint")
-    write(100,*) C_qsh
-    close(100)
-    print*,C_qsh
-  end subroutine get_shcond
 
 
-
-  ! calcola il numero di chern di un generico stato dipendente da k con il metodo di Resta
-  subroutine Get_Chern_number(State,Chern_number,Berry_curvatures,one_over_area)
-    complex(8),intent(in),dimension(:,:,:)                     :: state !(nhilb, nk1, nk2)
-    real(8),intent(out)                                        :: chern_number
-    real(8),intent(out),dimension(size(state,2),size(state,3)) :: berry_curvatures
-    real(8),intent(in)                                         :: one_over_area
-    integer                                                    :: nhilb,nk1,nk2
-    integer                                                    :: i1,i2,i3,ix,i1p,i1m,i2m,i2p,it
-    complex(8)                                                 :: path_scalar_products(4)
-    real(8)                                                    :: berry_phase
+  subroutine get_Chern_Number(Hk,Nkvec,Noccupied,one_over_area,Chern)
+    complex(8),intent(in),dimension(:,:,:)    :: Hk    ![Nlso][Nlso][Nktot]
+    integer,intent(in),dimension(2)           :: Nkvec ![Nk1][Nk2]: prod(Nkvec)=Nktot
+    integer,intent(in)                        :: Noccupied
+    real(8),intent(in)                        :: one_over_area
+    real(8),intent(out)                       :: Chern
     !
-    Nhilb= size(state,1)
-    Nk1  = size(state,2)
-    Nk2  = size(state,3)
-    chern_number = zero
-    do i1= 1, nk1
-       i1p = modulo(i1,nk1) + 1
-       i1m = modulo(i1-2,nk1) + 1
-       do i2= 1, nk2           !faccio l'integrale sulla bz
-          i2p = modulo(i2,nk2) + 1
-          i2m = modulo(i2-2,nk2) + 1
-          path_scalar_products(1) = dot_product(state(:,i1,i2),state(:,i1, i2p))
-          path_scalar_products(2) = dot_product(state(:,i1,i2p),state(:,i1p, i2p))
-          path_scalar_products(3) = dot_product(state(:,i1p,i2p),state(:,i1p, i2))
-          path_scalar_products(4) = dot_product(state(:,i1p,i2),state(:,i1,i2))
-          berry_phase = -dimag(zlog( product(path_scalar_products)  ))
-          berry_curvatures(i1,i2) = berry_phase*one_over_area
-          chern_number = chern_number + berry_phase
+    integer                                   :: Nlso
+    integer                                   :: Nktot
+    integer                                   :: Nkx,Nky
+    integer                                   :: ikx,iky
+    integer                                   :: ikxP,ikyP
+    integer                                   :: ik,iocc
+    complex(8),dimension(:,:),allocatable     :: Eigvec ![Nlso][Nlso]
+    real(8),dimension(:),allocatable          :: Eigval ![Nlso]
+    complex(8),dimension(:,:),allocatable     :: Gmat
+    complex(8),dimension(:,:,:,:),allocatable :: BlochStates ![Nkx][Nky][Noccupied][Nlso]
+    complex(8),dimension(4)                   :: Ulink
+    real(8),dimension(:,:),allocatable        :: BerryCurvature
+    real(8)                                   :: berry_phase
+    integer                                   :: unit
+    !
+    Nlso  = size(Hk,1)
+    Nktot = size(Hk,3)
+    Nkx   = Nkvec(1)
+    Nky   = Nkvec(2)
+    call assert_shape(Hk,[Nlso,Nlso,Nktot],"Get_Chern_NUmber","Hk")
+    if(Nkx*Nky/=Nktot)stop "ERROR Get_Chern_Number: Nktot = prod(Nkvec)"
+    !
+    !
+    !1. Get the Bloch states from H(:,:,k)
+    allocate(Eigvec(Nlso,Nlso))
+    allocate(Eigval(Nlso))
+    allocate(BlochStates(Nkx,Nky,Noccupied,Nlso))
+    allocate(BerryCurvature(Nkx,Nky))
+    allocate(Gmat(Noccupied,Noccupied))
+    ik=0
+    do ikx=1,Nkx
+       do iky=1,Nky
+          ik=ik+1
+          Eigvec = Hk(:,:,ik)
+          call eigh(Eigvec,Eigval)
+          do iocc=1,Noccupied
+             BlochStates(ikx,iky,iocc,:) = Eigvec(:,iocc)
+          enddo
        enddo
     enddo
-    chern_number = chern_number/pi2
-  end subroutine get_chern_number
+    deallocate(Eigvec,Eigval)
+    !
+    !
+    !2. Evaluate the Berry Curvature
+    chern=0d0
+    do ikx= 1, Nkx
+       ikxP = modulo(ikx,Nkx) + 1
+       !ikxM = modulo(ikx-2,Nkx) + 1
+       do iky= 1, Nky
+          ikyP = modulo(iky,Nky) + 1
+          !ikyM = modulo(iky-2,Nky) + 1
+          !
+          if(Noccupied==1)then
+             Ulink(1) = dot_product(BlochStates(ikx,iky,1,:)  , BlochStates(ikx,ikyP,1,:))
+             Ulink(2) = dot_product(BlochStates(ikx,ikyP,1,:) , BlochStates(ikxP,ikyP,1,:))
+             Ulink(3) = dot_product(BlochStates(ikxP,ikyP,1,:), BlochStates(ikxP,iky,1,:))
+             Ulink(4) = dot_product(BlochStates(ikxP,iky,1,:) , BlochStates(ikx,iky,1,:))
+             !
+          else
+             !
+             do i=1,Noccupied
+                do j=1,Noccupied
+                   gmat(i,j) = dot_product(BlochStates(ikx,iky,i,:)  , BlochStates(ikx,ikyP,j,:))
+                enddo
+             enddo
+             Ulink(1) = det(gmat)
+             !
+             do i=1,Noccupied
+                do j=1,Noccupied
+                   gmat(i,j) = dot_product(BlochStates(ikx,ikyP,i,:) , BlochStates(ikxP,ikyP,j,:))
+                enddo
+             enddo
+             Ulink(2) = det(gmat)
+             !
+             do i=1,Noccupied
+                do j=1,Noccupied
+                   gmat(i,j) = dot_product(BlochStates(ikxP,ikyP,i,:), BlochStates(ikxP,iky,j,:))
+                enddo
+             enddo
+             Ulink(3) = det(gmat)
+             !
+             do i=1,Noccupied
+                do j=1,Noccupied
+                   gmat(i,j) = dot_product(BlochStates(ikxP,iky,i,:) , BlochStates(ikx,iky,j,:))
+                enddo
+             enddo
+             Ulink(4) = det(gmat)
+             !
+          endif
+          !
+          berry_phase = dimag(zlog( product(Ulink(:))  ))
+          chern = chern + berry_phase
+          BerryCurvature(ikx,iky) = berry_phase*one_over_area
+          !
+       enddo
+    enddo
+    !
+    chern=chern/pi2
+    !
+    open(unit=free_unit(unit),file="Chern_Number.dat")
+    write(unit,*)chern
+    close(unit)
+    !
+    call splot3d("Berry_Curvature.dat",&
+         linspace(0d0,pi2,Nkx,iend=.false.),&
+         linspace(0d0,pi2,Nky,iend=.false.),&
+         BerryCurvature(:Nkx,:Nky))
+    !
+  end subroutine Get_Chern_Number
 
+
+
+
+
+
+
+  ! function get_kinetic_energy(Hk,Liw) result(ed_Ekin)
+  !   integer                                  :: Lk,No,Liw
+  !   integer                                  :: i,ik,iorb
+  !   complex(8),dimension(:,:,:)              :: Hk ![Nso][Nso][Nk]
+  !   real(8),dimension(size(Hk,3))            :: Wtk
+  !   !
+  !   real(8),dimension(:),allocatable         :: wm
+  !   complex(8),dimension(:,:),allocatable    :: Ak,Bk
+  !   complex(8),dimension(:,:),allocatable    :: Ck,Zk
+  !   complex(8),dimension(:,:),allocatable    :: Zeta,Gk,Tk
+  !   real(8)                                  :: Tail0,Tail1,spin_degeneracy
+  !   !
+  !   real(8)                                  :: H0,ed_Ekin
+  !   !
+  !   No = size(Hk,1)
+  !   Lk = size(Hk,3)
+  !   if(No/=size(Hk,2))stop "get_kinetic_energy: size(Hk,1)!=size(Hk,2) [Norb_total]"
+  !   if(Lk/=size(Wtk))stop "get_kinetic_energy: size(Wtk)!=size(Hk,3) [L_k]"
+  !   !
+  !   allocate(wm(Liw))
+  !   allocate(Ak(No,No),Bk(No,No),Ck(No,No),Zk(No,No),Zeta(No,No),Gk(No,No),Tk(No,No))
+  !   !
+  !   wm = pi/beta*dble(2*arange(1,Liw)-1)
+  !   Wtk=1d0/Lk
+  !   !
+  !   H0=0d0
+  !   Zk=0d0 ; forall(i=1:No)Zk(i,i)=1d0
+  !   do ik=1,Lk
+  !      Bk=-Hk(:,:,ik)
+  !      do i=1,Liw
+  !         Gk = (xi*wm(i)+xmu)*Zk(:,:) - Hk(:,:,ik)
+  !         select case(No)
+  !         case default
+  !            call matrix_inverse(Gk)
+  !         case(1)
+  !            Gk = 1d0/Gk
+  !         end select
+  !         Tk = Zk(:,:)/(xi*wm(i)) - Bk(:,:)/(xi*wm(i))**2
+  !         Ck = matmul(Hk(:,:,ik),Gk - Tk)
+  !         H0 = H0 + Wtk(ik)*trace_matrix(Ck,No)
+  !      enddo
+  !   enddo
+  !   spin_degeneracy=3.d0-Nspin !2 if Nspin=1, 1 if Nspin=2
+  !   H0=H0/beta*2.d0*spin_degeneracy
+  !   !
+  !   Tail0=0d0
+  !   Tail1=0d0
+  !   do ik=1,Lk
+  !      Ak= Hk(:,:,ik)
+  !      Bk=-Hk(:,:,ik)
+  !      Ck= matmul(Ak,Bk)
+  !      Tail0 = Tail0 + 0.5d0*Wtk(ik)*trace_matrix(Ak,No)
+  !      Tail1 = Tail1 + 0.25d0*Wtk(ik)*trace_matrix(Ck,No)
+  !   enddo
+  !   Tail0=spin_degeneracy*Tail0
+  !   Tail1=spin_degeneracy*Tail1*beta
+  !   ed_Ekin=H0+Tail0+Tail1
+  !   deallocate(wm,Ak,Bk,Ck,Zk,Zeta,Gk,Tk)
+  ! end function get_kinetic_energy
+
+
+  ! function get_local_energy(Hk,Liw) result(ed_Eloc)
+  !   integer                                  :: Lk,No,Liw
+  !   integer                                  :: i,ik,iorb
+  !   complex(8),dimension(:,:,:)              :: Hk ![Nso][Nso][Nk]
+  !   real(8),dimension(size(Hk,3))            :: Wtk
+  !   !
+  !   real(8),dimension(:),allocatable         :: wm
+  !   complex(8),dimension(:,:),allocatable    :: Ak,Bk,Hloc
+  !   complex(8),dimension(:,:),allocatable    :: Ck,Zk
+  !   complex(8),dimension(:,:),allocatable    :: Zeta,Gk,Tk
+  !   real(8)                                  :: Tail0,Tail1,spin_degeneracy
+  !   !
+  !   real(8)                                  :: H0,ed_Eloc
+  !   !
+  !   No = size(Hk,1)
+  !   Lk = size(Hk,3)
+  !   if(No/=size(Hk,2))stop "get_kinetic_energy: size(Hk,1)!=size(Hk,2) [Norb_total]"
+  !   if(Lk/=size(Wtk))stop "get_kinetic_energy: size(Wtk)!=size(Hk,3) [L_k]"
+  !   !
+  !   allocate(wm(Liw))
+  !   allocate(Ak(No,No),Bk(No,No),Ck(No,No),Zk(No,No),Zeta(No,No),Gk(No,No),Tk(No,No),Hloc(No,No))
+  !   !
+  !   wm = pi/beta*dble(2*arange(1,Liw)-1)
+  !   Wtk=1d0/Lk
+  !   !
+  !   Hloc=sum(Hk,3)/Lk
+  !   H0=0d0
+  !   Zk=0d0 ; forall(i=1:No)Zk(i,i)=1d0
+  !   do ik=1,Lk
+  !      Bk=-Hk(:,:,ik)
+  !      do i=1,Liw
+  !         Gk = (xi*wm(i)+xmu)*Zk(:,:) - Hk(:,:,ik)
+  !         select case(No)
+  !         case default
+  !            call matrix_inverse(Gk)
+  !         case(1)
+  !            Gk = 1d0/Gk
+  !         end select
+  !         Tk = Zk(:,:)/(xi*wm(i)) - Bk(:,:)/(xi*wm(i))**2
+  !         Ck = matmul(Hloc,Gk - Tk)
+  !         H0 = H0 + Wtk(ik)*trace_matrix(Ck,No)
+  !      enddo
+  !   enddo
+  !   spin_degeneracy=3.d0-Nspin !2 if Nspin=1, 1 if Nspin=2
+  !   H0=H0/beta*2.d0*spin_degeneracy
+  !   !
+  !   Tail0=0d0
+  !   Tail1=0d0
+  !   do ik=1,Lk
+  !      Ak= Hloc
+  !      Bk=-Hk(:,:,ik)
+  !      Ck= matmul(Ak,Bk)
+  !      Tail0 = Tail0 + 0.5d0*Wtk(ik)*trace_matrix(Ak,No)
+  !      Tail1 = Tail1 + 0.25d0*Wtk(ik)*trace_matrix(Ck,No)
+  !   enddo
+  !   Tail0=spin_degeneracy*Tail0
+  !   Tail1=spin_degeneracy*Tail1*beta
+  !   ed_Eloc=H0+Tail0+Tail1
+  !   deallocate(wm,Ak,Bk,Ck,Zk,Zeta,Gk,Tk,Hloc)
+  ! end function get_local_energy
+
+
+  ! function trace_matrix(M,dim) result(tr)
+  !   integer                       :: dim
+  !   complex(8),dimension(dim,dim) :: M
+  !   complex(8) :: tr
+  !   integer                       :: i
+  !   tr=dcmplx(0d0,0d0)
+  !   do i=1,dim
+  !      tr=tr+M(i,i)
+  !   enddo
+  ! end function trace_matrix
+
+  ! subroutine get_shcond()
+  !   real(8),dimension(L)                :: wm,vm
+  !   complex(8),dimension(2,2)           :: g0k,KerU,KerD
+  !   complex(8),dimension(2,2,2,Nktot,L) :: Gk
+  !   complex(8),dimension(L)             :: Kmats
+  !   complex(8),dimension(2,2,2,Nktot)   :: Vkx,Vky
+  !   complex(8)                          :: Ksum
+  !   real(8)                             :: kx,ky,C_qsh
+  !   integer                             :: iw,iv,ik,i,j
+  !   wm = pi/beta*real(2*arange(1,L)-1,8)
+  !   vm = pi/beta*real(2*arange(1,L)-2,8)
+  !   Kmats=zero
+  !   ik=0
+  !   do i=1,Nkx
+  !      kx = kxgrid(i)
+  !      do j=1,Nkx
+  !         ky = kxgrid(j)
+  !         ik=ik+1
+  !         Vkx(1,:,:,ik) = sin(kx)*pauli_tau_z + lambda*cos(kx)*pauli_tau_x
+  !         Vky(1,:,:,ik) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
+  !         Vkx(2,:,:,ik) = sin(kx)*pauli_tau_z - lambda*cos(kx)*pauli_tau_x
+  !         Vky(2,:,:,ik) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
+  !         do iw=1,L
+  !            g0k = (xi*wm(iw)+xmu)*eye(2)-hk_bhz2x2(kx,ky)
+  !            call inv(g0k)
+  !            Gk(1,:,:,ik,iw) = g0k
+  !            g0k = (xi*wm(iw)+xmu)*eye(2)-conjg(hk_bhz2x2(-kx,-ky))
+  !            call inv(g0k)
+  !            Gk(2,:,:,ik,iw) = g0k
+  !         enddo
+  !      enddo
+  !   enddo
+  !   call start_timer
+  !   do iv=1,L
+  !      Ksum=zero
+  !      do iw=1,L-iv+1
+  !         do ik=1,Nktot
+  !            KerU = matmul( Vky(1,:,:,ik) , Gk(1,:,:,ik,iw+iv-1) )
+  !            KerU = matmul( KerU          , Vkx(1,:,:,ik)      )
+  !            KerU = matmul( KerU          , Gk(1,:,:,ik,iw)    )
+  !            KerD = matmul( Vky(2,:,:,ik) , Gk(2,:,:,ik,iw+iv-1) )
+  !            KerD = matmul( KerD          , Vkx(2,:,:,ik)      )
+  !            KerD = matmul( KerD          , Gk(2,:,:,ik,iw)    )
+  !            Ksum = Ksum + trace_matrix(KerU,2)-trace_matrix(KerD,2)
+  !         enddo
+  !      enddo
+  !      Kmats(iv) = -Ksum/beta*2*pi/Nktot
+  !      call eta(iv,L)
+  !   enddo
+  !   call stop_timer
+  !   C_qsh = dreal(Kmats(2))/vm(2)
+  !   open(100,file="qsh_conductance.nint")
+  !   write(100,*) C_qsh
+  !   close(100)
+  !   print*,C_qsh
+  ! end subroutine get_shcond
+
+
+  ! function vkx_model(kpoint,N) result(vkx)
+  !   real(8),dimension(:)      :: kpoint
+  !   real(8)                   :: kx
+  !   complex(8),dimension(N,N) :: vkx
+  !   integer                   :: N
+  !   kx=kpoint(1)
+  !   vkx = zero
+  !   vkx(1:2,1:2) = sin(kx)*pauli_tau_z + lambda*cos(kx)*pauli_tau_x
+  !   vkx(3:4,3:4) = conjg(sin(-kx)*pauli_tau_z + lambda*cos(-kx)*pauli_tau_x) 
+  ! end function vkx_model
+
+  ! function vky_model(kpoint,N) result(vky)
+  !   real(8),dimension(:)      :: kpoint
+  !   real(8)                   :: ky
+  !   complex(8),dimension(N,N) :: vky
+  !   integer                   :: N
+  !   ky=kpoint(2)
+  !   vky = zero
+  !   vky(1:2,1:2) = sin(ky)*pauli_tau_z + lambda*cos(ky)*pauli_tau_y
+  !   vky(3:4,3:4) = conjg(sin(-ky)*pauli_tau_z + lambda*cos(-ky)*pauli_tau_y) 
+  ! end function vky_model
 
 end program bhz_2d
 
