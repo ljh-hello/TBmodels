@@ -15,7 +15,7 @@ LIBDIR=/opt
 
 ##$ CHOOSE THE MODEL BY SELECTING THE PROGRAM DRIVER
 
-EXE=bhz_2d_edge_afm2
+EXE=hm_2bands_flat
 
 
 ##$ SET THE LOCATION OF YOU PROGRAM DRIVER (default is ./drivers)
