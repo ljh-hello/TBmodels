@@ -27,22 +27,23 @@ program weyl_3d
   complex(8),dimension(:,:,:,:,:),allocatable :: Gmats,Greal,Sfoo !(Nspin,Nspin,Norb,Norb,L)
   complex(8),dimension(:,:,:),allocatable     :: Skin !(Nso,Nso,L)
   character(len=20)                           :: file
-  logical                                     :: iexist
+  logical                                     :: iexist, gfflag
   complex(8),dimension(Nso,Nso)               :: Gamma1,Gamma2,Gamma3,Gamma5
 
+  call parse_input_variable(gfflag,"GFFLAG","inputweyl.conf",default=.true.)
   call parse_input_variable(nkx,"NKX","inputweyl.conf",default=25)
   call parse_input_variable(nkpath,"NKPATH","inputweyl.conf",default=500)
   call parse_input_variable(L,"L","inputweyl.conf",default=2048)
   call parse_input_variable(mh,"MH","inputweyl.conf",default=1d0)
   call parse_input_variable(e0,"E0","inputweyl.conf",default=1d0)
   call parse_input_variable(rh,"RH","inputweyl.conf",default=0d0)
-  call parse_input_variable(lambda,"LAMBDA","inputweyl.conf",default=0.3d0)
+  call parse_input_variable(lambda,"LAMBDA","inputweyl.conf",default=0.5d0)
   call parse_input_variable(delta,"DELTA","inputweyl.conf",default=0d0)
   call parse_input_variable(xmu,"XMU","inputweyl.conf",default=0.d0)
   call parse_input_variable(eps,"EPS","inputweyl.conf",default=4.d-2)
   call parse_input_variable(beta,"BETA","inputweyl.conf",default=1000.d0)
   call parse_input_variable(file,"FILE","inputweyl.conf",default="hkfile_weyl.in")
-  call parse_input_variable(bx,"BX","inputweyl.conf",default=0.d0)
+  call parse_input_variable(bx,"BX","inputweyl.conf",default=0.3.d0)
   call parse_input_variable(by,"BY","inputweyl.conf",default=0.d0)
   call parse_input_variable(bz,"BZ","inputweyl.conf",default=0.d0)
   call parse_input_variable(BIA,"BIA","inputweyl.conf",default=0.d0)
@@ -89,16 +90,17 @@ program weyl_3d
   kpath(1,:)=kpoint_m1
   kpath(2,:)=kpoint_x2
   kpath(3,:)=kpoint_gamma
-  kpath(4,:)=kpoint_m1
+  kpath(4,:)=kpoint_x1
   kpath(5,:)=kpoint_m2
   kpath(6,:)=kpoint_r
   kpath(7,:)=kpoint_x3
   kpath(8,:)=kpoint_gamma
   call TB_solve_model(hk_weyl,Nso,kpath,Nkpath,&
        colors_name=[red1,blue1,red1,blue1],&
-       points_name=[character(len=10) :: "M","X","G","M","A","R","Z","G"],&
+       points_name=[character(len=10) :: "M","X","G","X1","A","R","Z","G"],&
        file="Eigenband.nint")
 
+if (gfflag) then
   !Build the local GF:
   allocate(Gmats(Nspin,Nspin,Norb,Norb,L))
   allocate(Greal(Nspin,Nspin,Norb,Norb,L))
@@ -125,6 +127,7 @@ program weyl_3d
 
   Sfoo = zero
   call dmft_kinetic_energy(Hk,Wtk,Sfoo)
+endif
 
   !Evaluate the Z2 index:
   !STRONG TI
