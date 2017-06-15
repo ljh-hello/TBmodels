@@ -1,8 +1,8 @@
-include 'dmft_get_gloc_dos.f90'
+! include 'dmft_get_gloc_dos.f90'
 program hm_2b_flat
   USE SCIFOR
   USE DMFT_TOOLS
-  USE DMFT_GET_GLOC_DOS
+  ! USE DMFT_GET_GLOC_DOS
   implicit none
 
   integer,parameter                       :: Norb=2,Nspin=1,Nso=Nspin*Norb
@@ -59,9 +59,11 @@ program hm_2b_flat
   Gmats=zero
   Greal=zero
   Sfoo =zero
-  call dmft_get_gloc_matsubara_normal_dos(Ebands,Dbands,Hloc,Gmats,Sfoo,iprint=1)
+  ! call dmft_get_gloc_matsubara_normal_dos(Ebands,Dbands,Hloc,Gmats,Sfoo,iprint=1)
+  call dmft_gloc_matsubara(Ebands,Dbands,Hloc,Gmats,Sfoo,iprint=1)
   Sfoo =zero
-  call dmft_get_gloc_realaxis_normal_dos(Ebands,Dbands,Hloc,Greal,Sfoo,iprint=1)
+  ! call dmft_get_gloc_realaxis_normal_dos(Ebands,Dbands,Hloc,Greal,Sfoo,iprint=1)
+  call dmft_gloc_realaxis(Ebands,Dbands,Hloc,Greal,Sfoo,iprint=1)
   do iorb=1,Nso
      dens(iorb) = fft_get_density(Gmats(1,1,iorb,iorb,:),beta)
   enddo
@@ -72,7 +74,7 @@ program hm_2b_flat
   write(*,"(A,20F14.9)")"Occupations =",(dens(iorb),iorb=1,Nso),sum(dens)
 
   allocate(Spoo(Nso,Nso,L));Spoo=zero
-  Eout = dmft_kinetic_energy_normal_dos(Ebands,Dbands,Hloc,Spoo)
+  Eout = dmft_kinetic_energy(Ebands,Dbands,Hloc,Spoo)
   print*,Eout
 
 
@@ -98,138 +100,136 @@ contains
 
 
 
-  function dmft_kinetic_energy_normal_dos(Ebands,Dbands,Hloc,Sigma) result(Eout)
-    real(8),dimension(:,:),intent(in)                           :: Ebands  ![Nspin*Norb][Lk]
-    real(8),dimension(size(Ebands,1),size(Ebands,2)),intent(in) :: Dbands  ![Nspin*Norb][Lk]
-    real(8),dimension(size(Ebands,1)),intent(in)                :: Hloc    ![Nspin*Norb]
-    complex(8),dimension(:,:,:)                                 :: Sigma   ![Nspin*Norb][Nspin*Norb][L]
-    !
-    integer                                                     :: Lk,Nso,Liw
-    integer                                                     :: i,ik,iso
-    !
-    integer                                                     :: Norb,Nporb
-    integer                                                     :: Nspin  
-    real(8)                                                     :: beta
-    real(8)                                                     :: xmu
-    !
-    real(8),dimension(size(Ebands,1),size(Ebands,1))            :: Sigma_HF
-    !
-    complex(8)                                                  :: Ak,Bk,Ck,Dk
-    complex(8)                                                  :: Gk,Tk
-    real(8)                                                     :: Tail0,Tail1,Lail0,Lail1,spin_degeneracy
-    !
-    real(8)                                                     :: H0,Hl
-    real(8)                                                     :: Ekin,Eloc
-    real(8)                                                     :: Eout(2)
-    !
-    real(8),dimension(:),allocatable                            :: wm
+  ! function dmft_kinetic_energy_normal_dos(Ebands,Dbands,Hloc,Sigma) result(Eout)
+  !   real(8),dimension(:,:),intent(in)                           :: Ebands  ![Nspin*Norb][Lk]
+  !   real(8),dimension(size(Ebands,1),size(Ebands,2)),intent(in) :: Dbands  ![Nspin*Norb][Lk]
+  !   real(8),dimension(size(Ebands,1)),intent(in)                :: Hloc    ![Nspin*Norb]
+  !   complex(8),dimension(:,:,:)                                 :: Sigma   ![Nspin*Norb][Nspin*Norb][L]
+  !   !
+  !   integer                                                     :: Lk,Nso,Liw
+  !   integer                                                     :: i,ik,iso
+  !   !
+  !   integer                                                     :: Norb,Nporb
+  !   integer                                                     :: Nspin  
+  !   real(8)                                                     :: beta
+  !   real(8)                                                     :: xmu
+  !   !
+  !   real(8),dimension(size(Ebands,1),size(Ebands,1))            :: Sigma_HF
+  !   !
+  !   complex(8)                                                  :: Ak,Bk,Ck,Dk
+  !   complex(8)                                                  :: Gk,Tk
+  !   real(8)                                                     :: Tail0,Tail1,Lail0,Lail1,spin_degeneracy
+  !   !
+  !   real(8)                                                     :: H0,Hl
+  !   real(8)                                                     :: Ekin,Eloc
+  !   real(8)                                                     :: Eout(2)
+  !   !
+  !   real(8),dimension(:),allocatable                            :: wm
+  !   !Retrieve parameters:
+  !   call get_ctrl_var(Norb,"NORB")
+  !   call get_ctrl_var(Nspin,"NSPIN")
+  !   call get_ctrl_var(beta,"BETA")
+  !   call get_ctrl_var(xmu,"XMU")
+  !   !
+  !   Nso = size(Ebands,1)
+  !   Lk  = size(Ebands,2)
+  !   Liw = size(Sigma,3)
+  !   !Testing:
+  !   if(Nso/=Norb*Nspin)stop "dmft_kinetic_energy_normal_dos: Nso != Norb*Nspin [from Hk]"
+  !   call assert_shape(Sigma,[Nso,Nso,Liw],"dmft_kinetic_energy_normal_main","Sigma")
+  !   !
+  !   !Allocate and setup the Matsubara freq.
+  !   if(allocated(wm))deallocate(wm);allocate(wm(Liw))
+  !   wm = pi/beta*dble(2*arange(1,Liw)-1)
+  !   !
+  !   !Get HF part of the self-energy
+  !   Sigma_HF = dreal(Sigma(:,:,Liw))
+  !   !
+  !   !
+  !   write(*,"(A)") "Kinetic energy computation"
+  !   call start_timer()
+  !   H0=0d0
+  !   Hl=0d0
+  !   !Get principal part: Tr[ Hk.(Gk-Tk) ]
+  !   do ik=1,Lk
+  !      do iso=1,Nso
+  !         Ak = Ebands(iso,ik)
+  !         Bk =-Ebands(iso,ik) - Sigma_HF(iso,iso) 
+  !         do i=1,Liw
+  !            Gk = (xi*wm(i)+xmu) - Sigma(iso,iso,i) - Ebands(iso,ik)
+  !            Gk = 1d0/Gk
+  !            Tk = 1d0/(xi*wm(i)) - Bk/(xi*wm(i))**2
+  !            Ck = Ak*(Gk - Tk)
+  !            Dk = Hloc(iso)*(Gk - Tk)
+  !            H0 = H0 + Dbands(iso,ik)*Ck
+  !            Hl = Hl + Dbands(iso,ik)*Dk
+  !         enddo
+  !      enddo
+  !      call eta(ik,Lk)
+  !   enddo
+  !   call stop_timer()
+  !   spin_degeneracy=3d0-Nspin     !2 if Nspin=1, 1 if Nspin=2
+  !   H0=H0/beta*2*spin_degeneracy
+  !   Hl=Hl/beta*2*spin_degeneracy
+  !   !
+  !   !get tail subtracted contribution: Tr[ Hk.Tk ]
+  !   Tail0=0d0
+  !   Tail1=0d0
+  !   Lail0=0d0
+  !   Lail1=0d0
+  !   do ik=1,Lk
+  !      do iso=1,Nso
+  !         Ak = Ebands(iso,ik)
+  !         Bk =-Ebands(iso,ik) - Sigma_HF(iso,iso)
+  !         Ck= Ak*Bk
+  !         Dk= Hloc(iso)*Bk
+  !         Tail0 = Tail0 + 0.5d0*Dbands(iso,ik)*Ak
+  !         Tail1 = Tail1 + 0.25d0*Dbands(iso,ik)*Ck
+  !         Lail0 = Lail0 + 0.5d0*Dbands(iso,ik)*Hloc(iso)
+  !         Lail1 = Lail1 + 0.25d0*Dbands(iso,ik)*Dk
+  !      enddo
+  !   enddo
+  !   Tail0=Tail0*spin_degeneracy
+  !   Tail1=Tail1*beta*spin_degeneracy
+  !   Lail0=Lail0*spin_degeneracy
+  !   Lail1=Lail1*beta*spin_degeneracy
+  !   !
+  !   Ekin=H0+Tail0+Tail1
+  !   Eloc=Hl+Lail0+Lail1
+  !   Eout = [Ekin,Eloc]
+  !   !
+  !   call write_kinetic_info()
+  !   call write_kinetic_value(Eout)
+  !   !
+  !   deallocate(wm)
+  ! end function dmft_kinetic_energy_normal_dos
 
 
-    !Retrieve parameters:
-    call get_ctrl_var(Norb,"NORB")
-    call get_ctrl_var(Nspin,"NSPIN")
-    call get_ctrl_var(beta,"BETA")
-    call get_ctrl_var(xmu,"XMU")
-    !
-    Nso = size(Ebands,1)
-    Lk  = size(Ebands,2)
-    Liw = size(Sigma,3)
-    !Testing:
-    if(Nso/=Norb*Nspin)stop "dmft_kinetic_energy_normal_dos: Nso != Norb*Nspin [from Hk]"
-    call assert_shape(Sigma,[Nso,Nso,Liw],"dmft_kinetic_energy_normal_main","Sigma")
-    !
-    !Allocate and setup the Matsubara freq.
-    if(allocated(wm))deallocate(wm);allocate(wm(Liw))
-    wm = pi/beta*dble(2*arange(1,Liw)-1)
-    !
-    !Get HF part of the self-energy
-    Sigma_HF = dreal(Sigma(:,:,Liw))
-    !
-    !
-    write(*,"(A)") "Kinetic energy computation"
-    call start_timer()
-    H0=0d0
-    Hl=0d0
-    !Get principal part: Tr[ Hk.(Gk-Tk) ]
-    do ik=1,Lk
-       do iso=1,Nso
-          Ak = Ebands(iso,ik)
-          Bk =-Ebands(iso,ik) - Sigma_HF(iso,iso) 
-          do i=1,Liw
-             Gk = (xi*wm(i)+xmu) - Sigma(iso,iso,i) - Ebands(iso,ik)
-             Gk = 1d0/Gk
-             Tk = 1d0/(xi*wm(i)) - Bk/(xi*wm(i))**2
-             Ck = Ak*(Gk - Tk)
-             Dk = Hloc(iso)*(Gk - Tk)
-             H0 = H0 + Dbands(iso,ik)*Ck
-             Hl = Hl + Dbands(iso,ik)*Dk
-          enddo
-       enddo
-       call eta(ik,Lk)
-    enddo
-    call stop_timer()
-    spin_degeneracy=3d0-Nspin     !2 if Nspin=1, 1 if Nspin=2
-    H0=H0/beta*2*spin_degeneracy
-    Hl=Hl/beta*2*spin_degeneracy
-    !
-    !get tail subtracted contribution: Tr[ Hk.Tk ]
-    Tail0=0d0
-    Tail1=0d0
-    Lail0=0d0
-    Lail1=0d0
-    do ik=1,Lk
-       do iso=1,Nso
-          Ak = Ebands(iso,ik)
-          Bk =-Ebands(iso,ik) - Sigma_HF(iso,iso)
-          Ck= Ak*Bk
-          Dk= Hloc(iso)*Bk
-          Tail0 = Tail0 + 0.5d0*Dbands(iso,ik)*Ak
-          Tail1 = Tail1 + 0.25d0*Dbands(iso,ik)*Ck
-          Lail0 = Lail0 + 0.5d0*Dbands(iso,ik)*Hloc(iso)
-          Lail1 = Lail1 + 0.25d0*Dbands(iso,ik)*Dk
-       enddo
-    enddo
-    Tail0=Tail0*spin_degeneracy
-    Tail1=Tail1*beta*spin_degeneracy
-    Lail0=Lail0*spin_degeneracy
-    Lail1=Lail1*beta*spin_degeneracy
-    !
-    Ekin=H0+Tail0+Tail1
-    Eloc=Hl+Lail0+Lail1
-    Eout = [Ekin,Eloc]
-    !
-    call write_kinetic_info()
-    call write_kinetic_value(Eout)
-    !
-    deallocate(wm)
-  end function dmft_kinetic_energy_normal_dos
+  ! !+-------------------------------------------------------------------+
+  ! !PURPOSE  : write legend, i.e. info about columns 
+  ! !+-------------------------------------------------------------------+
+  ! subroutine write_kinetic_info()
+  !   integer :: unit
+  !   unit = free_unit()
+  !   open(unit,file="dmft_kinetic_energy.info")
+  !   write(unit,"(A1,90(A14,1X))")"#",reg(txtfy(1))//"<K>",reg(txtfy(2))//"<Eloc>"
+  !   close(unit)
+  ! end subroutine write_kinetic_info
 
 
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : write legend, i.e. info about columns 
-  !+-------------------------------------------------------------------+
-  subroutine write_kinetic_info()
-    integer :: unit
-    unit = free_unit()
-    open(unit,file="dmft_kinetic_energy.info")
-    write(unit,"(A1,90(A14,1X))")"#",reg(txtfy(1))//"<K>",reg(txtfy(2))//"<Eloc>"
-    close(unit)
-  end subroutine write_kinetic_info
-
-
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : Write energies to file
-  !+-------------------------------------------------------------------+
-  subroutine write_kinetic_value(Eout)
-    real(8) :: Eout(2),Ekin,Eloc
-    integer :: unit
-    unit = free_unit()
-    Ekin=Eout(1)
-    Eloc=Eout(2)
-    open(unit,file="dmft_kinetic_energy.dat")
-    write(unit,"(90F15.9)")Ekin,Eloc
-    close(unit)
-  end subroutine write_kinetic_value
+  ! !+-------------------------------------------------------------------+
+  ! !PURPOSE  : Write energies to file
+  ! !+-------------------------------------------------------------------+
+  ! subroutine write_kinetic_value(Eout)
+  !   real(8) :: Eout(2),Ekin,Eloc
+  !   integer :: unit
+  !   unit = free_unit()
+  !   Ekin=Eout(1)
+  !   Eloc=Eout(2)
+  !   open(unit,file="dmft_kinetic_energy.dat")
+  !   write(unit,"(90F15.9)")Ekin,Eloc
+  !   close(unit)
+  ! end subroutine write_kinetic_value
 
 
   ! function get_kinetic_energy(Hk,Liw) result(ed_Ekin)
@@ -367,5 +367,20 @@ contains
   ! end function trace_matrix
 
 end program hm_2b_flat
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

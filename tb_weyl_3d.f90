@@ -21,7 +21,7 @@ program weyl_3d
 
   real(8)                                 :: chern
   real(8)                                 :: mh,rh,lambda,delta,bx,by,bz,BIA
-  real(8)                                 :: xmu,beta,eps,Eout(2)
+  real(8)                                 :: xmu,beta,eps,e0
   real(8)                                 :: dens(Nso)
   complex(8)                              :: Hloc(Nso,Nso)
   complex(8),dimension(:,:,:),allocatable :: Gmats,Greal,Sfoo !(Nso,Nso,L)
@@ -33,6 +33,7 @@ program weyl_3d
   call parse_input_variable(nkpath,"NKPATH","inputweyl.conf",default=500)
   call parse_input_variable(L,"L","inputweyl.conf",default=2048)
   call parse_input_variable(mh,"MH","inputweyl.conf",default=1d0)
+  call parse_input_variable(e0,"E0","inputweyl.conf",default=1d0)
   call parse_input_variable(rh,"RH","inputweyl.conf",default=0d0)
   call parse_input_variable(lambda,"LAMBDA","inputweyl.conf",default=0.3d0)
   call parse_input_variable(delta,"DELTA","inputweyl.conf",default=0d0)
@@ -151,11 +152,11 @@ contains
     !
     Hk          = zero
     Hk(1:2,1:2) = &
-         (Mh - eps*cos(kx) - eps*cos(ky) - eps*cos(kz))*pauli_tau_z +&
+         (Mh - e0*(cos(kx) + cos(ky) + cos(kz)) )*pauli_tau_z +&
          lambda*sin(kx)*pauli_tau_x + lambda*sin(ky)*pauli_tau_y +&
 		 by*pauli_tau_y + bz*pauli_tau_z
     Hk(3:4,3:4) = conjg( &
-         (Mh - eps*cos(kx) - eps*cos(ky) - eps*cos(kz))*pauli_tau_z +&
+         (Mh - e0*(cos(-kx) + cos(-ky) + cos(-kz)) )*pauli_tau_z +&
          lambda*sin(-kx)*pauli_tau_x + lambda*sin(-ky)*pauli_tau_y +&
 		 by*pauli_tau_y - bz*pauli_tau_z)
     Hk(1:2,3:4) = lambda*sin(kz)*pauli_tau_x - BIA*pauli_tau_x + bx*pauli_tau_z

@@ -40,29 +40,24 @@ program hc_haldane
   Nktot=Nk*Nk
   write(*,"(A)")"Using Nk="//txtfy(Nktot)
 
-  a=1d0
-  a0=a*sqrt(3d0)
-
-  !Lattice basis (a=1; a0=sqrt3*a) is:
-  !\a_1 = a0 [ sqrt3/2 , 1/2 ]
-  !\a_2 = a0 [ sqrt3/2 ,-1/2 ]
+  !BACKUP LATTICE STRUCTURE: (see graphene.f90)
+  !LATTICE BASIS:
+  ! nearest neighbor: A-->B, B-->A
+  d1= [  1d0/2d0 , sqrt(3d0)/2d0 ]
+  d2= [  1d0/2d0 ,-sqrt(3d0)/2d0 ]
+  d3= [ -1d0     , 0d0           ]
   !
   !
-  !nearest neighbor: A-->B, B-->A
-  d1= a*[  1d0/2d0 , sqrt(3d0)/2d0 ]
-  d2= a*[  1d0/2d0 ,-sqrt(3d0)/2d0 ]
-  d3= a*[ -1d0     , 0d0           ]
+  !next nearest-neighbor displacements: A-->A, B-->B, cell basis
+  a1 = d2-d3                    !a*sqrt(3)[sqrt(3)/2,-1/2]
+  a2 = d3-d1                    !a*sqrt(3)[-sqrt(3)/2,-1/2]
+  a3 = d1-d2                    !a*sqrt(3)[0, 1]
   !
-  !next nearest-neighbor displacements: A-->A, B-->B \== \nu_1,\nu_2, \nu_3=\nu_1-\nu_2
-  a1=a0*[ sqrt(3d0)/2d0, 1d0/2d0]
-  a2=a0*[ sqrt(3d0)/2d0,-1d0/2d0]
-  a3=a2-a1
-
-
+  !
   !RECIPROCAL LATTICE VECTORS:
-  bklen=4d0*pi/3d0
-  bk1=bklen*[ 1d0/2d0 ,  sqrt(3d0)/2d0 ]
-  bk2=bklen*[ 1d0/2d0 , -sqrt(3d0)/2d0 ]
+  bklen=4d0*pi/sqrt(3d0)
+  bk1=bklen*[ sqrt(3d0)/2d0 ,  1d0/2d0 ]
+  bk2=bklen*[ sqrt(3d0)/2d0 , -1d0/2d0 ]
 
 
   pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
@@ -90,18 +85,6 @@ program hc_haldane
 
   print*,sum(Hk,3)/dble(Nktot)
 
-  !THIS IS WRONG BECUASE THE GRIDS KXGRID,KYGRID
-  !CAN ONLY BE DESCRIBED AS VECTORS GRID (i.e.
-  ! you can not store the information with a single 
-  ! real number) 
-  ! call write_hk_w90("Hkrfile_Haldane.data",&
-  !      No=Nlso,&
-  !      Nd=Nso,&
-  !      Np=0,&
-  !      Nineq=1,&
-  !      Hk=Hk,&
-  !      kxgrid=kxgrid,kygrid=kygrid,kzgrid=[0d0])
-
 
   Eshift=xmu
 
@@ -110,7 +93,7 @@ program hc_haldane
   KPath(2,:)=pointK
   Kpath(3,:)=pointKp
   KPath(4,:)=[0d0,0d0]
-  call TB_Solve_path(hk_haldane_model,Nlso,KPath,Nkpath,&
+  call TB_Solve_model(hk_haldane_model,Nlso,KPath,Nkpath,&
        colors_name=[red1,blue1],&
        points_name=[character(len=10) :: "G","K","K`","G"],&
        file="Eigenbands.nint")
@@ -118,7 +101,6 @@ program hc_haldane
 
 
 
-  ! allocate(wm(Lfreq),wr(Lfreq))
   allocate(Gmats(Nlso,Nlso,Lfreq),Greal(Nlso,Nlso,Lfreq),Sfoo(Nlso,Nlso,Lfreq))
   Gmats=zero
   Greal=zero
@@ -166,7 +148,7 @@ program hc_haldane
   close(10)
 
   write(*,"(A,10F14.9)")"Occupations =",(Ndens(iorb),iorb=1,Nlso),sum(Ndens)
-  write(*,"(A,I)")"Chern num.  =",nint(chern)
+  write(*,"(A,I3)")"Chern num.  =",nint(chern)
 
 
 
@@ -177,11 +159,11 @@ contains
 
 
   function hk_haldane_model(kpoint,Nlso) result(hk)
-    real(8),dimension(:)          :: kpoint
-    integer                       :: Nlso
+    real(8),dimension(:)            :: kpoint
+    integer                         :: Nlso
     complex(8),dimension(Nlso,Nlso) :: hk
-    real(8)                       :: h0,hx,hy,hz
-    real(8)                       :: kdotd(3),kdota(3)
+    real(8)                         :: h0,hx,hy,hz
+    real(8)                         :: kdotd(3),kdota(3)
     !(k.d_j)
     kdotd(1) = dot_product(kpoint,d1)
     kdotd(2) = dot_product(kpoint,d2)

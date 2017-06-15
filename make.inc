@@ -5,7 +5,7 @@ FC=mpif90
 ##$ PLATFORM: supported platform are intel, gnu
 ##$ if using a parallel compiler (mpif90) check
 ##$ platform first using the cmd: $mpif90 -show
-PLAT=intel
+PLAT=gnu
 
 
 ##$ LOCATION OF THE scifor and dmft_tools DIRECTORIES
@@ -15,7 +15,7 @@ LIBDIR=/opt
 
 ##$ CHOOSE THE MODEL BY SELECTING THE PROGRAM DRIVER
 
-EXE=hm_2bands_flat
+EXE=tdd-pam_2d
 
 
 ##$ SET THE LOCATION OF YOU PROGRAM DRIVER (default is ./drivers)

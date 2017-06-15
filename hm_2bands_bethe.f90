@@ -1,8 +1,8 @@
-include 'dmft_get_gloc_dos.f90'
+! include 'dmft_get_gloc_dos.f90'
 program hm_2b_flat
   USE SCIFOR
   USE DMFT_TOOLS
-  USE DMFT_GET_GLOC_DOS
+  ! USE DMFT_GET_GLOC_DOS
   implicit none
 
   integer,parameter                       :: Norb=2,Nspin=1,Nso=Nspin*Norb
@@ -58,9 +58,9 @@ program hm_2b_flat
   Gmats=zero
   Greal=zero
   Sfoo =zero
-  call dmft_get_gloc_matsubara_normal_dos(Ebands,Dbands,Hloc,Gmats,Sfoo,iprint=1)
+  call dmft_gloc_matsubara(Ebands,Dbands,Hloc,Gmats,Sfoo,iprint=1)
   Sfoo =zero
-  call dmft_get_gloc_realaxis_normal_dos(Ebands,Dbands,Hloc,Greal,Sfoo,iprint=1)
+  call dmft_gloc_realaxis(Ebands,Dbands,Hloc,Greal,Sfoo,iprint=1)
   do iorb=1,Nso
      dens(iorb) = fft_get_density(Gmats(1,1,iorb,iorb,:),beta)
   enddo
@@ -70,9 +70,10 @@ program hm_2b_flat
   close(10)
   write(*,"(A,20F14.9)")"Occupations =",(dens(iorb),iorb=1,Nso),sum(dens)
 
-  ! Sfoo = zero
-  ! Eout = dmft_kinetic_energy(Hk,Wtk,Sfoo)
-  ! print*,Eout
+  Sfoo = zero
+  Eout = dmft_kinetic_energy(Ebands,Dbands,Hloc,Sfoo(1,1,:,:,:))
+  print*,Eout
+
 
 
 

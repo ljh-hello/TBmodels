@@ -6,7 +6,7 @@ program graphene
   integer,parameter                       :: Norb=2,Nso=Norb
   integer                                 :: Nk,Nktot,Lfreq,Nkpath
   real(8)                                 :: ts,tsp,phi,delta,xmu,beta,eps,wmax,Mh,Ndens(Nso)
-  real(8)                                 :: a0,bklen
+  real(8)                                 :: bklen
   integer                                 :: i,j,k,ik,ix,iy,iorb,jorb
   real(8)                                 :: kx,ky,Eshift
   real(8),dimension(:),allocatable        :: kxgrid,kygrid
@@ -36,26 +36,43 @@ program graphene
   write(*,"(A)")"Using Nk="//txtfy(Nktot)
 
 
-  !Lattice basis (a=1; a0=sqrt3*a) is:
-  !\a_1 = a0 [ sqrt3/2 , 1/2 ]
-  !\a_2 = a0 [ sqrt3/2 ,-1/2 ]
-  !
-  !
-  !nearest neighbor: A-->B, B-->A
+  !OLD VERSION KEPT HERE FOR BACKUP PURPOSE:
+  ! !Lattice basis (a=1; a0=sqrt3*a) is:
+  ! !\a_1 = a0 [ sqrt3/2 , 1/2 ]
+  ! !\a_2 = a0 [ sqrt3/2 ,-1/2 ]
+  ! !
+  ! !nearest neighbor: A-->B, B-->A
+  ! d1= [  1d0/2d0 , sqrt(3d0)/2d0 ]
+  ! d2= [  1d0/2d0 ,-sqrt(3d0)/2d0 ]
+  ! d3= [ -1d0     , 0d0           ]
+  ! !
+  ! !next nearest-neighbor displacements: A-->A, B-->B \== \nu_1,\nu_2, \nu_3=\nu_1-\nu_2
+  ! a1=[ sqrt(3d0)/2d0, 1d0/2d0]
+  ! a2=[ sqrt(3d0)/2d0,-1d0/2d0]
+  ! a3=a2-a1
+  ! !RECIPROCAL LATTICE VECTORS:
+  ! bklen=4d0*pi/3d0
+  ! bk1=bklen*[ 1d0/2d0 ,  sqrt(3d0)/2d0 ]
+  ! bk2=bklen*[ 1d0/2d0 , -sqrt(3d0)/2d0 ]
+
+  !LATTICE BASIS:
+  ! nearest neighbor: A-->B, B-->A
   d1= [  1d0/2d0 , sqrt(3d0)/2d0 ]
   d2= [  1d0/2d0 ,-sqrt(3d0)/2d0 ]
   d3= [ -1d0     , 0d0           ]
   !
-  !next nearest-neighbor displacements: A-->A, B-->B \== \nu_1,\nu_2, \nu_3=\nu_1-\nu_2
-  a1=[ sqrt(3d0)/2d0, 1d0/2d0]
-  a2=[ sqrt(3d0)/2d0,-1d0/2d0]
-  a3=a2-a1
-
-
+  !
+  !next nearest-neighbor displacements: A-->A, B-->B, cell basis
+  a1 = d2-d3                    !a*sqrt(3)[sqrt(3)/2,-1/2]
+  a2 = d3-d1                    !a*sqrt(3)[-sqrt(3)/2,-1/2]
+  a3 = d1-d2                    !a*sqrt(3)[0, 1]
+  !
+  !
   !RECIPROCAL LATTICE VECTORS:
-  bklen=4d0*pi/3d0
-  bk1=bklen*[ 1d0/2d0 ,  sqrt(3d0)/2d0 ]
-  bk2=bklen*[ 1d0/2d0 , -sqrt(3d0)/2d0 ]
+  bklen=4d0*pi/sqrt(3d0)
+  bk1=bklen*[ sqrt(3d0)/2d0 ,  1d0/2d0 ]
+  bk2=bklen*[ sqrt(3d0)/2d0 , -1d0/2d0 ]
+
 
   pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
   pointKp= [2*pi/3,-2*pi/3/sqrt(3d0)]
@@ -84,13 +101,13 @@ program graphene
 
   print*,sum(Hk,3)/dble(Nktot)
 
-  call write_hk_w90("Hkrfile_graphene.data",&
-       No=Nso,&
-       Nd=Norb,&
-       Np=0,&
-       Nineq=1,&
-       Hk=Hk,&
-       kxgrid=kxgrid,kygrid=kygrid,kzgrid=[0d0])
+  ! call write_hk_w90("Hkrfile_graphene.data",&
+  !      No=Nso,&
+  !      Nd=Norb,&
+  !      Np=0,&
+  !      Nineq=1,&
+  !      Hk=Hk,&
+  !      kxgrid=kxgrid,kygrid=kygrid,kzgrid=[0d0])
 
 
   Eshift=xmu
@@ -100,7 +117,7 @@ program graphene
   KPath(2,:)=pointK
   Kpath(3,:)=pointKp
   KPath(4,:)=[0d0,0d0]
-  call TB_Solve_path(graphene_model,Nso,KPath,Nkpath,&
+  call TB_Solve_model(graphene_model,Nso,KPath,Nkpath,&
        colors_name=[red1,blue1],&
        points_name=[character(len=10) :: "G","K","K`","G"],&
        file="Eigenbands.nint")
