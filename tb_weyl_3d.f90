@@ -10,24 +10,25 @@ program weyl_3d
   USE DMFT_TOOLS
   implicit none
 
-  integer,parameter                       :: Norb=2,Nspin=2,Nso=Nspin*Norb
-  integer                                 :: Nk,Nktot,Nkpath,Nkx,Npts,L,z2(4)
-  integer                                 :: i,j,k,ik,iorb,jorb
-  integer                                 :: ix,iy,iz
-  real(8)                                 :: kx,ky,kz
-  real(8),dimension(:,:),allocatable      :: kgrid,kpath,ktrims
-  complex(8),dimension(:,:,:),allocatable :: Hk
-  real(8),dimension(:),allocatable        :: Wtk
+  integer,parameter                           :: Norb=2,Nspin=2,Nso=Nspin*Norb
+  integer                                     :: Nk,Nktot,Nkpath,Nkx,Npts,L,z2(4)
+  integer                                     :: i,j,k,ik,iorb,jorb,io,ispin
+  integer                                     :: ix,iy,iz
+  real(8)                                     :: kx,ky,kz
+  real(8),dimension(:,:),allocatable          :: kgrid,kpath,ktrims
+  complex(8),dimension(:,:,:),allocatable     :: Hk
+  real(8),dimension(:),allocatable            :: Wtk
 
-  real(8)                                 :: chern
-  real(8)                                 :: mh,rh,lambda,delta,bx,by,bz,BIA
-  real(8)                                 :: xmu,beta,eps,e0
-  real(8)                                 :: dens(Nso)
-  complex(8)                              :: Hloc(Nso,Nso)
-  complex(8),dimension(:,:,:),allocatable :: Gmats,Greal,Sfoo !(Nso,Nso,L)
-  character(len=20)                       :: file
-  logical                                 :: iexist
-  complex(8),dimension(Nso,Nso)           :: Gamma1,Gamma2,Gamma3,Gamma5
+  real(8)                                     :: chern
+  real(8)                                     :: mh,rh,lambda,delta,bx,by,bz,BIA
+  real(8)                                     :: xmu,beta,eps,e0
+  real(8)                                     :: dens(Nso)
+  complex(8)                                  :: Hloc(Nso,Nso)
+  complex(8),dimension(:,:,:,:,:),allocatable :: Gmats,Greal,Sfoo !(Nspin,Nspin,Norb,Norb,L)
+  complex(8),dimension(:,:,:),allocatable     :: Skin !(Nso,Nso,L)
+  character(len=20)                           :: file
+  logical                                     :: iexist
+  complex(8),dimension(Nso,Nso)               :: Gamma1,Gamma2,Gamma3,Gamma5
 
   call parse_input_variable(nkx,"NKX","inputweyl.conf",default=25)
   call parse_input_variable(nkpath,"NKPATH","inputweyl.conf",default=500)
@@ -99,28 +100,33 @@ program weyl_3d
        file="Eigenband.nint")
 
   !Build the local GF:
-  allocate(Gmats(Nso,Nso,L))
-  allocate(Greal(Nso,Nso,L))
-  allocate(Sfoo(Nso,Nso,L))
+  allocate(Gmats(Nspin,Nspin,Norb,Norb,L))
+  allocate(Greal(Nspin,Nspin,Norb,Norb,L))
+  allocate(Sfoo(Nspin,Nspin,Norb,Norb,L))
   Gmats=zero
   Greal=zero
   Sfoo =zero
-  call dmft_gloc_matsubara(Hk,Wtk,Gmats,Sfoo,iprint=1)
+  call dmft_gloc_matsubara(Hk,Wtk,Gmats,Sfoo,iprint=3)
   Sfoo =zero
-  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sfoo,iprint=1)
-  do iorb=1,Nso
-     dens(iorb) = fft_get_density(Gmats(iorb,iorb,:),beta)
+  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sfoo,iprint=3)
+
+
+  do ispin=1,Nspin
+     do iorb=1,Norb
+        io = iorb + (ispin-1)*Norb
+        dens(io) = fft_get_density(Gmats(ispin,ispin,iorb,iorb,:),beta)
+     enddo
   enddo
   !plot observables
   open(10,file="observables.nint")
-  write(10,"(20F20.12)")(dens(iorb),iorb=1,Nso),sum(dens)
+  write(10,"(20F20.12)")(dens(io),io=1,Nso),sum(dens)
   close(10)
   write(*,"(A,20F14.9)")"Occupations =",(dens(iorb),iorb=1,Nso),sum(dens)
 
   Sfoo = zero
   call dmft_kinetic_energy(Hk,Wtk,Sfoo)
-  
- !Evaluate the Z2 index:
+
+  !Evaluate the Z2 index:
   !STRONG TI
   z2(1) = z2_number(reshape( [ [0,0,0] , [1,0,0] , [1,1,0] , [0,1,0] , [0,1,1] , [0,0,1] , [1,0,1] , [1,1,1] ] , [3,8] )*pi)
   !WEAK TI
@@ -154,11 +160,11 @@ contains
     Hk(1:2,1:2) = &
          (Mh - e0*(cos(kx) + cos(ky) + cos(kz)) )*pauli_tau_z +&
          lambda*sin(kx)*pauli_tau_x + lambda*sin(ky)*pauli_tau_y +&
-		 by*pauli_tau_y + bz*pauli_tau_z
+         by*pauli_tau_y + bz*pauli_tau_z
     Hk(3:4,3:4) = conjg( &
          (Mh - e0*(cos(-kx) + cos(-ky) + cos(-kz)) )*pauli_tau_z +&
          lambda*sin(-kx)*pauli_tau_x + lambda*sin(-ky)*pauli_tau_y +&
-		 by*pauli_tau_y - bz*pauli_tau_z)
+         by*pauli_tau_y - bz*pauli_tau_z)
     Hk(1:2,3:4) = lambda*sin(kz)*pauli_tau_x - BIA*pauli_tau_x + bx*pauli_tau_z
     Hk(3:4,1:2) = lambda*sin(kz)*pauli_tau_x + BIA*pauli_tau_x + bx*pauli_tau_z
     !
